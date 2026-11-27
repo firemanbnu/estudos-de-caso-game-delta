@@ -934,14 +934,21 @@ $('addFogo').onclick = () => { placing = 'OC_FOGO'; atualizarPlace(); };
 $('addComb').onclick = () => { placing = 'OC_COMB'; atualizarPlace(); };
 
 // ---------- Desenho ----------
+// Dimensões reais das viaturas (metros): comprimento x largura
+const DIM_VEICULO = { AB:[10,3], AP:[10,3], UR:[6,2.5], AMB:[6,2.5], CMD:[6,2.5] };
 function desenharVeiculo(u) {
-  const t = TIPOS[u.tipo], L = 34, Wd = 15, k = 1/cam.s;
+  const t = TIPOS[u.tipo], k = 1/cam.s;
+  // desenho em caixa de referência 34 x 15, esticada para as medidas reais (comprimento x largura)
+  const [cm, lm] = DIM_VEICULO[u.tipo] || [6, 2.5];
+  const L = 34, Wd = 15;
+  const sx = (cm / M_POR_PX) / L, sy = (lm / M_POR_PX) / Wd;
+  const lw = k / ((sx + sy) / 2);   // espessura de linha constante na tela
   if (u.id === selId) {
-    ctx.strokeStyle = '#fff'; ctx.lineWidth = 2*k; ctx.setLineDash([4*k,3*k]);
-    ctx.beginPath(); ctx.arc(u.x, u.y, 24, 0, Math.PI*2); ctx.stroke(); ctx.setLineDash([]);
+    ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.5*k; ctx.setLineDash([3*k, 2*k]);
+    ctx.beginPath(); ctx.arc(u.x, u.y, 12*k, 0, Math.PI*2); ctx.stroke(); ctx.setLineDash([]);
   }
   ctx.save();
-  ctx.translate(u.x, u.y); ctx.rotate(u.h || 0);
+  ctx.translate(u.x, u.y); ctx.rotate(u.h || 0); ctx.scale(sx, sy);
   // sombra
   ctx.fillStyle = 'rgba(0,0,0,0.35)'; ctx.fillRect(-L/2+2, -Wd/2+3, L, Wd);
   // rodas
@@ -952,7 +959,7 @@ function desenharVeiculo(u) {
   ctx.fillStyle = 'rgba(255,255,255,0.28)'; ctx.fillRect(-L/2 + 1, -Wd/2 + 1, L - 2, 3);
   ctx.fillStyle = t.cab; ctx.fillRect(L/2-10, -Wd/2, 10, Wd);
   ctx.fillStyle = 'rgba(186,230,253,0.85)'; ctx.fillRect(L/2-8, -Wd/2+2, 5, Wd-4);
-  ctx.strokeStyle = '#1f2937'; ctx.lineWidth = k; ctx.strokeRect(-L/2, -Wd/2, L, Wd);
+  ctx.strokeStyle = '#1f2937'; ctx.lineWidth = lw; ctx.strokeRect(-L/2, -Wd/2, L, Wd);
   // detalhes por tipo
   if (u.tipo === 'AB' || u.tipo === 'AP') {
     ctx.fillStyle = '#dc2626'; ctx.fillRect(-L/2+3, -1.2, L-14, 2.4);
@@ -967,27 +974,26 @@ function desenharVeiculo(u) {
   } else if (u.tipo === 'CMD') {
     ctx.fillStyle = '#fff'; ctx.fillRect(-L/2+3, -1, L-14, 2);
   }
-  // número da unidade desenhado sobre a viatura (ex.: CCI 1 -> "1")
+  ctx.restore();
+  // número da unidade: distintivo de tamanho fixo na tela, sobre a viatura
   const num = (u.id.match(/\d+$/) || [])[0];
   if (num) {
-    const nx = L/2 - 20;
-    ctx.fillStyle = '#ffffff'; ctx.beginPath(); ctx.arc(nx, 0, 6.5, 0, Math.PI*2); ctx.fill();
-    ctx.fillStyle = '#111'; ctx.font = 'bold 9px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.fillText(num, nx, 0.5);
+    ctx.fillStyle = '#ffffff'; ctx.beginPath(); ctx.arc(u.x, u.y, 5*k, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle = '#111'; ctx.font = `bold ${7*k}px sans-serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(num, u.x, u.y + 0.5*k);
     ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
   }
-  ctx.restore();
   // luzes de emergência: piscam quando a unidade está em operação ou deslocamento
   if (u.acao !== 'parado' || u.dest) {
     const fase = Math.floor(performance.now() / 110) % 2;
     ctx.fillStyle = fase ? 'rgba(239,68,68,0.9)' : 'rgba(59,130,246,0.9)';
-    ctx.beginPath(); ctx.arc(u.x + 6, u.y - 9, 3.2, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc(u.x + 3*k, u.y - 7*k, 2.2*k, 0, Math.PI*2); ctx.fill();
     ctx.strokeStyle = 'rgba(0,0,0,0.6)'; ctx.lineWidth = k; ctx.stroke();
   }
   // identificação
   ctx.font = `bold ${11*k}px sans-serif`; ctx.lineWidth = 3*k;
   ctx.strokeStyle = 'rgba(0,0,0,0.8)'; ctx.fillStyle = '#fff';
-  ctx.strokeText(u.id, u.x - 10, u.y - 15); ctx.fillText(u.id, u.x - 10, u.y - 15);
+  ctx.strokeText(u.id, u.x - 10*k, u.y - 13*k); ctx.fillText(u.id, u.x - 10*k, u.y - 13*k);
 }
 
 function desenhar() {
