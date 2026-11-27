@@ -1005,11 +1005,18 @@ function acaoRapida(pt) {
   if (acao) comandarAcao(u, acao);
 }
 // Trajeto da escorregadeira em coordenadas do mundo.
-// Portas: abrem a 90° com a fuselagem. Saídas sobre a asa: sem escorregadeira na asa; as pessoas andam até a borda de fuga e escorregam pela parte de trás dela.
+// Portas: abrem a 90° com a fuselagem (as traseiras, 20° mais para trás). Saídas sobre a asa: sem escorregadeira na asa; as pessoas andam até a borda de fuga e escorregam pela parte de trás dela.
 function trajetoEscorregadeira(p) {
-  const pts = p.tipo === 'asa'
-    ? [[p.lx, p.ly], [-17, p.lado * 29], [-42, p.lado * 38]]
-    : [[p.lx, p.ly], [p.lx, p.ly + p.lado * 44]];
+  let pts;
+  if (p.tipo === 'asa') {
+    // sai pela asa até a extremidade traseira dela e vira 80° em direção à ponta da asa
+    const rx = Math.min(-12, p.lx - 4), ang = 80 * Math.PI / 180;
+    pts = [[p.lx, p.ly], [rx, p.lado * 9], [rx - Math.cos(ang) * 40, p.lado * (9 + Math.sin(ang) * 40)]];
+  } else if (p.lx < -10) {
+    // portas traseiras: escorregadeira 20° mais para trás que os 90° da fuselagem
+    const a20 = 20 * Math.PI / 180;
+    pts = [[p.lx, p.ly], [p.lx - Math.sin(a20) * 44, p.ly + p.lado * Math.cos(a20) * 44]];
+  } else pts = [[p.lx, p.ly], [p.lx, p.ly + p.lado * 44]];
   return pts.map(q => aeroParaMundo(q[0], q[1]));
 }
 function pontaEscorregadeira(p, t = 1) {
