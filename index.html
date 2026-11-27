@@ -116,7 +116,9 @@
     <button data-add="UR">CRS</button>
     <button data-add="AMB">AMBULÂNCIA</button>
     <button data-add="CMD">PCM</button>
-    <button data-add="AT" class="sec">Área AT</button>
+    <button data-add="ACV" class="sec">Concentração de vítimas</button>
+    <button data-add="TRI" class="sec">Triagem</button>
+    <button data-add="TRA" class="sec">Transporte</button>
     <button data-add="CC" class="sec">Área CC</button>
     <button data-add="RE" class="sec">Área RE</button>
   </div>
@@ -246,11 +248,15 @@ const TIPOS = {
   CMD: { nome:'PCM', ab:'PCM', cor:'#7e22ce', cab:'#581c87', vel:300, acoes:['parado'] }
 };
 const AREAS = {
-  AT: { nome:'Área de atendimento médico', sigla:'AT', cor:'#22c55e' },
-  CC: { nome:'Concentração de viaturas',   sigla:'CC', cor:'#60a5fa' },
-  RE: { nome:'Área de reabastecimento',    sigla:'RE', cor:'#f59e0b' }
+  ACV: { nome:'Área de concentração de vítimas', sigla:'ACV', cor:'#ef4444', r:45 },
+  TRI: { nome:'Área de triagem',                 sigla:'TRI', cor:'#22c55e', r:66 },
+  TRA: { nome:'Área de transporte',              sigla:'TRA', cor:'#374151', r:42 },
+  CC:  { nome:'Concentração de viaturas',        sigla:'CC',  cor:'#60a5fa', r:45 },
+  RE:  { nome:'Área de reabastecimento',         sigla:'RE',  cor:'#f59e0b', r:45 }
 };
 const AREA_R = 45;
+// Triagem: três retângulos lado a lado (verde, amarelo, vermelho), deslocamentos em relação ao centro da área
+const TRI_RET = [{ dx:-42, cor:'#22c55e' }, { dx:0, cor:'#facc15' }, { dx:42, cor:'#ef4444' }];
 const RANGE = 100;      // alcance de atuação em relação à aeronave (unidades do mapa)
 const ACAO_ROTULO = {
   parado:'Parado', combate:'Apagar fogo', espuma:'Espuma sobre combustível', resgate:'Resgatar passageiros',
@@ -329,7 +335,7 @@ ajustarTela();
 let estado = 'preparo';          // preparo | andamento | encerrado
 let pausado = false, tempo = 0, caso = null, desc = '', inc = null;
 let unidades = [], areas = [];
-let selId = null, selAreaId = null, placing = null, drag = null, panning = null;
+let selId = null, selAreaId = null, placing = null, drag = null, panning = null, areaDrag = null;
 let usou = new Set();
 let cfgAberta = false, cfgPrev = null;
 let painelAberto = true;
@@ -363,7 +369,7 @@ function criarUnidade(tipo, x, y) {
 }
 function criarArea(tipo, x, y) {
   const n = areas.filter(a => a.tipo === tipo).length + 1;
-  return { id: AREAS[tipo].sigla + '-' + n, tipo, x, y, r: AREA_R };
+  return { id: AREAS[tipo].sigla + '-' + n, tipo, x, y, r: AREAS[tipo].r || AREA_R };
 }
 const areaPorId = id => areas.find(a => a.id === id) || null;
 const unidadePorId = id => unidades.find(u => u.id === id) || null;
@@ -373,10 +379,16 @@ function unidadeEm(p) {
   for (let i = unidades.length - 1; i >= 0; i--) if (DIST(unidades[i], p) <= tol) return unidades[i];
   return null;
 }
-function areaEm(p) { return areas.find(a => DIST(a, p) <= a.r) || null; }
+// Formas: triagem e transporte são retângulos; concentração e demais áreas são círculos
+function dentroArea(a, p) {
+  if (a.tipo === 'TRI') return Math.abs(p.x - a.x) <= 64 && Math.abs(p.y - a.y) <= 18;
+  if (a.tipo === 'TRA') return Math.abs(p.x - a.x) <= 35 && Math.abs(p.y - a.y) <= 20;
+  return DIST(a, p) <= a.r;
+}
+function areaEm(p) { return areas.find(a => dentroArea(a, p)) || null; }
 function naAreaAT(u) {
   const a = areaPorId(u.area);
-  return !!a && a.tipo === 'AT' && DIST(u, a) <= a.r;
+  return !!a && a.tipo === 'ACV' && DIST(u, a) <= a.r;
 }
 function mover(u, tx, ty, dt) {
   const dx = tx - u.x, dy = ty - u.y, d = Math.hypot(dx, dy), passo = TIPOS[u.tipo].vel * dt;
@@ -985,12 +997,23 @@ function desenhar() {
 
   // áreas
   for (const a of areas) {
-    const c = AREAS[a.tipo].cor;
-    ctx.globalAlpha = 0.18; ctx.fillStyle = c;
-    ctx.beginPath(); ctx.arc(a.x, a.y, a.r, 0, Math.PI*2); ctx.fill();
-    ctx.globalAlpha = 1;
-    ctx.strokeStyle = c; ctx.lineWidth = (a.id === selAreaId ? 3 : 1.5)*k;
-    ctx.setLineDash([6*k, 4*k]); ctx.beginPath(); ctx.arc(a.x, a.y, a.r, 0, Math.PI*2); ctx.stroke(); ctx.setLineDash([]);
+    const c = AREAS[a.tipo].cor, sel = a.id === selAreaId;
+    if (a.tipo === 'TRI') {
+      for (const q of TRI_RET) {
+        const x = a.x + q.dx - 20, y = a.y - 14;
+        ctx.globalAlpha = 0.5; ctx.fillStyle = q.cor; ctx.fillRect(x, y, 40, 28); ctx.globalAlpha = 1;
+        ctx.strokeStyle = sel ? '#fff' : q.cor; ctx.lineWidth = (sel ? 2.5 : 1.5)*k; ctx.strokeRect(x, y, 40, 28);
+      }
+    } else if (a.tipo === 'TRA') {
+      ctx.globalAlpha = 0.85; ctx.fillStyle = c; ctx.fillRect(a.x - 35, a.y - 20, 70, 40); ctx.globalAlpha = 1;
+      ctx.strokeStyle = sel ? '#fff' : '#9ca3af'; ctx.lineWidth = (sel ? 2.5 : 1.5)*k; ctx.strokeRect(a.x - 35, a.y - 20, 70, 40);
+    } else {
+      ctx.globalAlpha = 0.18; ctx.fillStyle = c;
+      ctx.beginPath(); ctx.arc(a.x, a.y, a.r, 0, Math.PI*2); ctx.fill();
+      ctx.globalAlpha = 1;
+      ctx.strokeStyle = c; ctx.lineWidth = (sel ? 3 : 1.5)*k;
+      ctx.setLineDash([6*k, 4*k]); ctx.beginPath(); ctx.arc(a.x, a.y, a.r, 0, Math.PI*2); ctx.stroke(); ctx.setLineDash([]);
+    }
     const n = unidades.filter(u => u.area === a.id).length;
     ctx.fillStyle = '#fff'; ctx.strokeStyle = 'rgba(0,0,0,0.75)'; ctx.lineWidth = 3*k;
     txt(a.id + ' (' + n + ')', a.x - 30, a.y - a.r - 6*k);
@@ -1059,6 +1082,8 @@ cv.addEventListener('mousedown', e => {
   }
   const u = unidadeEm(p);
   if (u) { selecionarUnidade(u.id); drag = { u, x0:p.x, y0:p.y, moved:false }; return; }
+  const ar = areaEm(p);
+  if (ar) { areaDrag = { a:ar, x0:p.x, y0:p.y, ox:ar.x, oy:ar.y, moved:false, p0:p }; return; }
   panning = { x:e.clientX, y:e.clientY, ox:cam.ox, oy:cam.oy, moved:false, dir:false, p };
 });
 window.addEventListener('mousemove', e => {
@@ -1066,6 +1091,12 @@ window.addEventListener('mousemove', e => {
     cam.ox = panning.ox + (e.clientX - panning.x); cam.oy = panning.oy + (e.clientY - panning.y);
     if (Math.hypot(e.clientX - panning.x, e.clientY - panning.y) > 4) panning.moved = true;
     cam.user = true; clampCam(); return;
+  }
+  if (areaDrag) {
+    const p = toWorld(e.clientX, e.clientY);
+    if (!areaDrag.moved && Math.hypot(p.x - areaDrag.x0, p.y - areaDrag.y0) * cam.s > 4) areaDrag.moved = true;
+    if (areaDrag.moved) { areaDrag.a.x = areaDrag.ox + (p.x - areaDrag.x0); areaDrag.a.y = areaDrag.oy + (p.y - areaDrag.y0); }
+    return;
   }
   if (!drag) return;
   const p = toWorld(e.clientX, e.clientY);
@@ -1084,7 +1115,11 @@ window.addEventListener('mouseup', () => {
     if (panning.dir) acaoRapida(panning);
     else cliqueMapa(panning.p);
   }
-  drag = null; panning = null;
+  if (areaDrag) {
+    if (areaDrag.moved) executar({ tipo:'moverArea', id:areaDrag.a.id, x:areaDrag.a.x, y:areaDrag.a.y });
+    else cliqueMapa(areaDrag.p0);
+  }
+  drag = null; panning = null; areaDrag = null;
 });
 // Clique em área vazia ou em área: envia a viatura selecionada, ou seleciona a área
 function cliqueMapa(p) {
@@ -1505,6 +1540,11 @@ function aplicarComando(c, local) {
     case 'area': {
       const a = areaPorId(c.areaId);
       if (u && a) enviarArea(u, a);
+      break;
+    }
+    case 'moverArea': {
+      const a = areaPorId(c.id);
+      if (a) { a.x = c.x; a.y = c.y; }
       break;
     }
     case 'sair':
