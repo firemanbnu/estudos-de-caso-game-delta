@@ -948,11 +948,11 @@ function gerarAeroProc(q) {
 const AERO_IMG = {
   a320: { src:'a320-topo.png', halfW:1.6, motor:{ x:2.6, y:5.4 } },
   a321: { src:'a321-topo.png', halfW:2.0, motor:{ x:4.7, y:6.3 } },
-  b738: { src:'b738-topo.png', halfW:1.75, motor:{ x:3.9, y:4.8 } },
+  b738: { src:'b738-topo.png', halfW:1.75, motor:{ x:4.7, y:4.7 } },
   a319: { src:'a320-topo.png', halfW:1.6, motor:{ x:2.6, y:5.4 } },
   a20n: { src:'a320-topo.png', halfW:1.6, motor:{ x:2.6, y:5.4 } },
   a21n: { src:'a321-topo.png', halfW:2.0, motor:{ x:4.7, y:6.3 } },
-  b38m: { src:'b738-topo.png', halfW:1.75, motor:{ x:3.9, y:4.8 } }
+  b38m: { src:'b738-topo.png', halfW:1.75, motor:{ x:4.7, y:4.7 } }
 };
 for (const id in PROC) AERO_IMG[id] = { gen: PROC[id], halfW: PROC[id].fw / 2, motor: PROC[id].motor };
 for (const id in AERO_IMG) {
