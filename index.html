@@ -884,21 +884,88 @@ const COMP_DESENHO_M = 126 * ESC_AERO * M_POR_PX, M_POR_UL = ESC_AERO * M_POR_PX
 let AE = { sx:1, sy:1, spec:null }, aeroKey = '';
 // Imagens (vista de cima, nariz para a direita) usadas no lugar do desenho genérico.
 // halfW: meia largura da fuselagem (m); motor: posição do motor direito em metros (x para o nariz, y para a lateral), usada para o fogo no motor.
+// Aeronaves sem foto de vista superior: desenho técnico gerado a partir das medidas reais (m, a partir do nariz)
+const PROC = {
+  e190: { L:36.24, S:28.72, fw:3.0, nose:3.2, ts:29.5, wing:{ le:14.6, rc:5.2, tc:1.6, tle:20.4, ry:1.5 }, eng:{ x:13.0, y:5.3, len:4.8, d:1.75 }, ht:{ le:31.0, rc:3.4, tc:1.2, tle:34.0, span:11.0 } },
+  e195: { L:38.65, S:28.72, fw:3.0, nose:3.2, ts:31.8, wing:{ le:15.7, rc:5.2, tc:1.6, tle:21.5, ry:1.5 }, eng:{ x:14.1, y:5.3, len:4.8, d:1.75 }, ht:{ le:33.4, rc:3.4, tc:1.2, tle:36.4, span:11.0 } },
+  e295: { L:41.5, S:35.1, fw:3.0, nose:3.4, ts:34.2, wing:{ le:16.8, rc:5.5, tc:1.5, tle:25.2, ry:1.5 }, eng:{ x:14.6, y:5.9, len:5.4, d:2.1 }, ht:{ le:36.4, rc:3.6, tc:1.2, tle:39.4, span:12.0 } },
+  atr72: { L:27.17, S:27.05, fw:2.8, nose:3.0, ts:20.5, wing:{ le:10.4, rc:2.5, tc:1.5, tle:10.9, ry:1.4 }, eng:{ x:7.4, y:4.05, len:6.8, d:1.1, prop:3.93 }, ht:{ le:23.0, rc:2.5, tc:1.4, tle:23.8, span:7.3 } },
+  a332: { L:58.82, S:60.3, fw:5.64, nose:6.5, ts:48.5, wing:{ le:23.0, rc:11.5, tc:2.2, tle:38.5, ry:2.8 }, eng:{ x:21.5, y:10.6, len:5.4, d:2.7 }, ht:{ le:50.5, rc:6.6, tc:2.0, tle:56.2, span:18.6 } }
+};
+for (const id in PROC) { const q = PROC[id]; q.motor = { x: q.L / 2 - (q.eng.x + q.eng.len * 0.45), y: q.eng.y }; }
+function gerarAeroProc(q) {
+  const W = 1000, k = W / q.L, H = Math.round(q.S * k), c = document.createElement('canvas'); c.width = W; c.height = H;
+  const g = c.getContext('2d'), cy = H / 2;
+  const X = xn => (q.L - xn) * k, Y = y => cy + y * k;      // nariz à direita
+  const poli = (pts, fill, stroke, lw) => { g.beginPath(); pts.forEach((p, n) => n ? g.lineTo(X(p[0]), Y(p[1])) : g.moveTo(X(p[0]), Y(p[1]))); g.closePath(); if (fill) { g.fillStyle = fill; g.fill(); } if (stroke) { g.strokeStyle = stroke; g.lineWidth = lw || 1.2; g.stroke(); } };
+  g.lineJoin = 'round'; g.lineCap = 'round';
+  const w = q.wing, hs = q.fw / 2;
+  const asa = s => {
+    const ty = s * q.S / 2;
+    const gr = g.createLinearGradient(X(w.le + w.rc / 2), Y(s * w.ry), X(w.tle + w.tc / 2), Y(ty)); gr.addColorStop(0, '#dfe3e8'); gr.addColorStop(1, '#c9cfd6');
+    poli([[w.le, s * w.ry], [w.tle, ty], [w.tle + w.tc, ty], [w.le + w.rc, s * w.ry]], gr, '#8c96a1', 1.6);
+    // flaps/ailerons e painel de borda de ataque
+    g.strokeStyle = 'rgba(90,100,112,.55)'; g.lineWidth = 1;
+    for (const f of [0.34, 0.66]) { g.beginPath(); g.moveTo(X(w.le + w.rc * (1 - f * 0.9)), Y(s * (w.ry + 0.3))); g.lineTo(X(w.tle + w.tc * (1 - f * 0.9)), Y(s * (q.S / 2 * 0.96))); g.stroke(); }
+    g.beginPath(); g.moveTo(X(w.le + w.rc * 0.16), Y(s * (w.ry + 0.2))); g.lineTo(X(w.tle + w.tc * 0.16), Y(s * (q.S / 2 * 0.97))); g.stroke();
+  };
+  const estab = s => { const h = q.ht, ty = s * h.span / 2; poli([[h.le, s * hs * 0.6], [h.tle, ty], [h.tle + h.tc, ty], [h.le + h.rc, s * hs * 0.6]], '#d5dae0', '#8c96a1', 1.4); };
+  const motor = s => {
+    const e = q.eng, y = s * e.y;
+    if (e.prop) {
+      g.fillStyle = '#b4bbc3'; g.strokeStyle = '#6f7983'; g.lineWidth = 1.4;
+      g.beginPath(); g.roundRect(X(e.x + e.len), Y(y - e.d / 2), e.len * k, e.d * k, e.d * k * 0.45); g.fill(); g.stroke();
+      g.fillStyle = 'rgba(60,70,80,.28)'; g.beginPath(); g.ellipse(X(e.x + e.len), Y(y), 0.22 * k, e.prop / 2 * k, 0, 0, 7); g.fill();
+      g.strokeStyle = '#2f353b'; g.lineWidth = 3; for (const a of [0.3, -0.3]) { g.beginPath(); g.moveTo(X(e.x + e.len), Y(y)); g.lineTo(X(e.x + e.len), Y(y + a * e.prop * 1.6)); g.stroke(); }
+      return;
+    }
+    const gr = g.createLinearGradient(0, Y(y - e.d / 2), 0, Y(y + e.d / 2)); gr.addColorStop(0, '#c8cdd3'); gr.addColorStop(0.5, '#eceff2'); gr.addColorStop(1, '#b3b9c1');
+    g.fillStyle = gr; g.strokeStyle = '#6f7983'; g.lineWidth = 1.4;
+    g.beginPath(); g.roundRect(X(e.x + e.len), Y(y - e.d / 2), e.len * k, e.d * k, e.d * k * 0.4); g.fill(); g.stroke();
+    g.fillStyle = '#3a4047'; g.beginPath(); g.ellipse(X(e.x + e.len) - 0.05 * k, Y(y), 0.12 * k, e.d * 0.36 * k, 0, 0, 7); g.fill();
+    g.strokeStyle = '#8f98a3'; g.lineWidth = 3; g.beginPath(); g.moveTo(X(e.x), Y(s * (y > cy ? 0 : 0) + y)); g.stroke();
+  };
+  // fuselagem: nariz elíptico, trecho reto e cone de cauda
+  const meia = x => {
+    if (x < q.nose) { const t = (q.nose - x) / q.nose; return hs * Math.sqrt(Math.max(0, 1 - t * t)); }
+    if (x > q.ts) { const t = (x - q.ts) / (q.L - q.ts); return hs * (1 - 0.88 * Math.pow(t, 1.15)); }
+    return hs;
+  };
+  const pts = []; for (let x = 0; x <= q.L + 0.001; x += q.L / 160) pts.push([x, meia(x)]);
+  const fus = pts.concat(pts.slice().reverse().map(p => [p[0], -p[1]]));
+  asa(1); asa(-1); estab(1); estab(-1); motor(1); motor(-1);
+  const gf = g.createLinearGradient(0, Y(-hs), 0, Y(hs)); gf.addColorStop(0, '#c4cad2'); gf.addColorStop(0.35, '#ffffff'); gf.addColorStop(0.65, '#f4f6f8'); gf.addColorStop(1, '#bcc3cb');
+  poli(fus, gf, '#7d8791', 1.8);
+  // para-brisa, linha dorsal e cone de cauda
+  g.fillStyle = '#2d343b'; g.beginPath(); g.moveTo(X(q.nose * 0.5), Y(-hs * 0.55)); g.lineTo(X(q.nose * 0.82), Y(-hs * 0.38)); g.lineTo(X(q.nose * 0.82), Y(hs * 0.38)); g.lineTo(X(q.nose * 0.5), Y(hs * 0.55)); g.closePath(); g.fill();
+  g.strokeStyle = 'rgba(110,120,132,.5)'; g.lineWidth = 1; g.beginPath(); g.moveTo(X(q.nose), Y(0)); g.lineTo(X(q.L - 0.8), Y(0)); g.stroke();
+  // raiz da deriva
+  poli([[q.ts - 1.5, 0.28], [q.L - 0.9, 0.18], [q.L - 0.9, -0.18], [q.ts - 1.5, -0.28]], '#e1e5ea', '#8c96a1', 1);
+  return c;
+}
+// Imagens (vista de cima, nariz para a direita) usadas no lugar do desenho genérico.
+// halfW: meia largura da fuselagem (m); motor: posição do motor direito em metros (x para o nariz, y para a lateral), usada para o fogo no motor.
 const AERO_IMG = {
   a320: { src:'a320-topo.png', halfW:1.6, motor:{ x:2.6, y:5.4 } },
   a321: { src:'a321-topo.png', halfW:2.0, motor:{ x:4.7, y:6.3 } },
-  b738: { src:'b738-topo.png', halfW:1.75, motor:{ x:3.9, y:4.8 } }
+  b738: { src:'b738-topo.png', halfW:1.75, motor:{ x:3.9, y:4.8 } },
+  a319: { src:'a320-topo.png', halfW:1.6, motor:{ x:2.6, y:5.4 } },
+  a20n: { src:'a320-topo.png', halfW:1.6, motor:{ x:2.6, y:5.4 } },
+  a21n: { src:'a321-topo.png', halfW:2.0, motor:{ x:4.7, y:6.3 } },
+  b38m: { src:'b738-topo.png', halfW:1.75, motor:{ x:3.9, y:4.8 } }
 };
+for (const id in PROC) AERO_IMG[id] = { gen: PROC[id], halfW: PROC[id].fw / 2, motor: PROC[id].motor };
 for (const id in AERO_IMG) {
-  const o = AERO_IMG[id]; o.img = new Image();
-  o.img.onload = () => {
+  const o = AERO_IMG[id];
+  const pronto = () => {
     // silhueta escura para a sombra
     const c = document.createElement('canvas'); c.width = o.img.width; c.height = o.img.height;
     const x = c.getContext('2d'); x.drawImage(o.img, 0, 0); x.globalCompositeOperation = 'source-in'; x.fillStyle = '#000'; x.fillRect(0, 0, c.width, c.height);
     o.sombra = c; o.ok = true;
-    if (typeof acDesenhar === 'function') acDesenhar();
+    try { acDesenhar(); } catch (e) {}
   };
-  o.img.src = o.src;
+  if (o.gen) { o.img = gerarAeroProc(o.gen); pronto(); continue; }
+  o.img = new Image(); o.img.onload = pronto; o.img.src = o.src;
 }
 const imgAero = spec => { const o = spec && AERO_IMG[spec.id]; return o && o.ok ? o : null; };
 function aeroParaMundo(lx, ly, a = aeroAtual()) {
@@ -2333,8 +2400,26 @@ const AERONAVES_PADRAO = [
     portas:[ {nome:'porta 1 esq.',x:20,lado:-1,tipo:'porta'}, {nome:'porta 1 dir.',x:20,lado:1,tipo:'porta'},
              {nome:'porta 2 esq.',x:11,lado:-1,tipo:'porta'}, {nome:'porta 2 dir.',x:11,lado:1,tipo:'porta'},
              {nome:'porta 3 esq.',x:-8,lado:-1,tipo:'porta'}, {nome:'porta 3 dir.',x:-8,lado:1,tipo:'porta'},
-             {nome:'porta 4 esq.',x:-19,lado:-1,tipo:'porta'}, {nome:'porta 4 dir.',x:-19,lado:1,tipo:'porta'} ] }
+             {nome:'porta 4 esq.',x:-19,lado:-1,tipo:'porta'}, {nome:'porta 4 dir.',x:-19,lado:1,tipo:'porta'} ] },
+  { id:'e190', nome:'Embraer E190', comp:36.2, env:28.7, pax:106, comb:'8.000 kg',
+    portas:[ {nome:'frente esq.',x:11,lado:-1,tipo:'porta'}, {nome:'frente dir.',x:11,lado:1,tipo:'porta'},
+             {nome:'asa esq.',x:-1,lado:-1,tipo:'asa'}, {nome:'asa dir.',x:-1,lado:1,tipo:'asa'},
+             {nome:'traseira esq.',x:-11.5,lado:-1,tipo:'porta'}, {nome:'traseira dir.',x:-11.5,lado:1,tipo:'porta'} ] },
+  { id:'e295', nome:'Embraer E195-E2', comp:41.5, env:35.1, pax:136, comb:'9.500 kg',
+    portas:[ {nome:'frente esq.',x:13.5,lado:-1,tipo:'porta'}, {nome:'frente dir.',x:13.5,lado:1,tipo:'porta'},
+             {nome:'asa esq.',x:-1,lado:-1,tipo:'asa'}, {nome:'asa dir.',x:-1,lado:1,tipo:'asa'},
+             {nome:'traseira esq.',x:-14,lado:-1,tipo:'porta'}, {nome:'traseira dir.',x:-14,lado:1,tipo:'porta'} ] },
+  { id:'a319', nome:'Airbus A319', comp:33.8, env:35.8, pax:144, comb:'11.000 kg',
+    portas:[ {nome:'porta 1 esq.',x:11,lado:-1,tipo:'porta',ang:-10,len:5.5}, {nome:'porta 1 dir.',x:11,lado:1,tipo:'porta',ang:-10,len:5.5},
+             {nome:'asa esq.',x:0.5,lado:-1,tipo:'asafus',len:4}, {nome:'asa dir.',x:0.5,lado:1,tipo:'asafus',len:4},
+             {nome:'porta 4 esq.',x:-10,lado:-1,tipo:'porta',ang:8,len:5.5}, {nome:'porta 4 dir.',x:-10,lado:1,tipo:'porta',ang:8,len:5.5} ] },
+  { id:'a20n', nome:'Airbus A320neo', comp:37.6, env:35.8, pax:174, comb:'12.000 kg', clonaDe:'a320' },
+  { id:'a21n', nome:'Airbus A321neo', comp:44.5, env:35.8, pax:220, comb:'15.000 kg', clonaDe:'a321' },
+  { id:'b38m', nome:'Boeing 737 MAX 8', comp:39.5, env:35.9, pax:176, comb:'14.000 kg', clonaDe:'b738' }
 ];
+// as variantes "neo"/MAX usam as mesmas portas do modelo base
+for (const a of AERONAVES_PADRAO) if (a.clonaDe) { a.portas = JSON.parse(JSON.stringify(AERONAVES_PADRAO.find(x => x.id === a.clonaDe).portas)); delete a.clonaDe; }
+
 const clonar = o => JSON.parse(JSON.stringify(o));
 let AERONAVES = [];
 function carregarAeronaves() {
@@ -2348,6 +2433,10 @@ function carregarAeronaves() {
         const i = a.findIndex(x => x.id === 'a320'), novo = clonar(AERONAVES_PADRAO.find(x => x.id === 'a320'));
         if (i >= 0) a[i] = novo; else a.push(novo);
         localStorage.setItem('sescinc-aeronaves-ver', '3'); localStorage.setItem('sescinc-aeronaves', JSON.stringify(a));
+      }
+      if (localStorage.getItem('sescinc-aeronaves-ver') !== '4') {
+        for (const d of AERONAVES_PADRAO) if (!a.some(x => x.id === d.id)) a.push(clonar(d));
+        localStorage.setItem('sescinc-aeronaves-ver', '4'); localStorage.setItem('sescinc-aeronaves', JSON.stringify(a));
       }
       return a;
     }
