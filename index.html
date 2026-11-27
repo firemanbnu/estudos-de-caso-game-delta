@@ -686,7 +686,7 @@ function desenharFumaca() {
   }
   ctx.globalAlpha = 1;
 }
-// Jato d'água das viaturas que estão combatendo
+// Jato de água/espuma das viaturas que estão combatendo: cone de gotas saindo do bico, respingo no foco
 function desenharJatos() {
   if (estado !== 'andamento') return;
   const alvos = alvosFogo(); if (!alvos.length) return;
@@ -699,10 +699,45 @@ function desenharJatos() {
       if (d < dmin) { dmin = d; alvo = q; }
     }
     if (!alvo || dmin > RANGE + alvo.raio) continue;
-    ctx.strokeStyle = 'rgba(186,230,253,0.75)'; ctx.lineWidth = 2.2*k;
-    ctx.setLineDash([3*k, 4*k]); ctx.lineDashOffset = -t * 60 * k;
-    ctx.beginPath(); ctx.moveTo(u.x, u.y); ctx.lineTo(alvo.x, alvo.y); ctx.stroke();
-    ctx.setLineDash([]); ctx.lineDashOffset = 0;
+    const dx = alvo.x - u.x, dy = alvo.y - u.y, len = Math.hypot(dx, dy) || 1;
+    const ux = dx / len, uy = dy / len, px = -uy, py = ux;
+    const bx = u.x + ux * 22 * k, by = u.y + uy * 22 * k;        // bico, na frente da viatura
+    const fim = Math.min(len, RANGE * 1.1);
+    const tx = bx + ux * fim, ty = by + uy * fim;                 // ponto onde o jato atinge
+    // corpo do jato: faixa translúcida que se alarga em direção ao alvo
+    const grad = ctx.createLinearGradient(bx, by, tx, ty);
+    grad.addColorStop(0, 'rgba(224,242,254,0.85)');
+    grad.addColorStop(1, 'rgba(255,255,255,0.45)');
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.moveTo(bx + px * 1.5 * k, by + py * 1.5 * k);
+    ctx.lineTo(tx + px * 9 * k, ty + py * 9 * k);
+    ctx.lineTo(tx - px * 9 * k, ty - py * 9 * k);
+    ctx.lineTo(bx - px * 1.5 * k, by - py * 1.5 * k);
+    ctx.closePath(); ctx.fill();
+    // gotas que viajam do bico até o foco, com dispersão crescente
+    for (let i = 0; i < 26; i++) {
+      const s = ((t * 1.6 + i / 26) % 1);
+      const d = s * fim;
+      const spread = (Math.sin(i * 12.9898 + t * 7) * 0.5) * (2 + s * 9) * k;
+      const x = bx + ux * d + px * spread, y = by + uy * d + py * spread;
+      ctx.fillStyle = i % 3 === 0 ? 'rgba(255,255,255,0.95)' : 'rgba(186,230,253,0.9)';
+      ctx.beginPath(); ctx.arc(x, y, (1.2 + (i % 3) * 0.6) * k, 0, Math.PI*2); ctx.fill();
+    }
+    // respingo no foco: gotas que sobem e caem em volta do ponto de impacto
+    for (let i = 0; i < 10; i++) {
+      const a = (i / 10) * Math.PI * 2 + t * 4;
+      const s = (t * 2.4 + i * 0.13) % 1;
+      const r = (3 + s * 14) * k;
+      const x = tx + Math.cos(a) * r, y = ty + Math.sin(a) * r - s * 6 * k;
+      ctx.globalAlpha = 1 - s;
+      ctx.fillStyle = 'rgba(240,249,255,1)';
+      ctx.beginPath(); ctx.arc(x, y, (1.4 * (1 - s) + 0.5) * k, 0, Math.PI*2); ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+    // névoa branca sobre o impacto
+    ctx.fillStyle = 'rgba(255,255,255,0.22)';
+    ctx.beginPath(); ctx.arc(tx, ty, (10 + 2 * Math.sin(t * 8)) * k, 0, Math.PI*2); ctx.fill();
   }
 }
 // Comando de ação: se há caso em andamento, a viatura já se posiciona no alcance da aeronave
