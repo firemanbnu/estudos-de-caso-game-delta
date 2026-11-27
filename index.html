@@ -235,7 +235,7 @@
       <label>Combustível <input id="acComb" style="width:110px" placeholder="Ex.: 6.500 kg"></label></div>
     <p id="acCat" class="peq"></p>
     <b style="font-size:12px">Portas e escorregadeiras</b>
-    <p class="peq">Posição em metros a partir do centro da aeronave (positivo = para o nariz). Tipo "Asa" = escorregadeira sobre a asa.</p>
+    <p class="peq">Posição em metros a partir do centro da aeronave (positivo = para o nariz). Inclinação: graus em relação ao lado (+ para trás, − para a frente; vazio = padrão). Comprimento da escorregadeira em metros. Saída de asa: não há escorregadeira sobre a asa.</p>
     <div id="acPortas"></div>
     <div class="linha"><button id="acAddPorta" class="sec">+ Porta</button><button id="acSalvar">Salvar aeronave</button><button id="acPadrao" class="sec">Restaurar padrões</button></div>
   </section>
@@ -1007,16 +1007,24 @@ function acaoRapida(pt) {
 // Trajeto da escorregadeira em coordenadas do mundo.
 // Portas: abrem a 90° com a fuselagem (as traseiras, 20° mais para trás). Saídas sobre a asa: sem escorregadeira na asa; as pessoas andam até a borda de fuga e escorregam pela parte de trás dela.
 function trajetoEscorregadeira(p) {
+  // metros (relativos à aeronave) -> unidades locais do desenho
+  const M = (xm, ym) => [xm / (M_POR_UL * AE.sx), ym / (M_POR_UL * AE.sy)];
+  const lenM = p.len > 0 ? p.len : 14;
   let pts;
   if (p.tipo === 'asa') {
     // sai pela asa até a extremidade traseira dela e vira 80° em direção à ponta da asa
     const rx = Math.min(-12, p.lx - 4), ang = 80 * Math.PI / 180;
     pts = [[p.lx, p.ly], [rx, p.lado * 9], [rx - Math.cos(ang) * 40, p.lado * (9 + Math.sin(ang) * 40)]];
-  } else if (p.lx < -10) {
-    // portas traseiras: escorregadeira 20° mais para trás que os 90° da fuselagem
-    const a20 = 20 * Math.PI / 180;
-    pts = [[p.lx, p.ly], [p.lx - Math.sin(a20) * 44, p.ly + p.lado * Math.cos(a20) * 44]];
-  } else pts = [[p.lx, p.ly], [p.lx, p.ly + p.lado * 44]];
+  } else if (p.tipo === 'asafus') {
+    // saída de asa com escorregadeira junto à fuselagem, correndo para trás a partir da saída
+    const y0 = p.ly + M(0, p.lado * 0.9)[1];
+    pts = [[p.lx, y0], [p.lx - M(lenM, 0)[0], y0]];
+  } else {
+    // portas: 90° com a fuselagem, com inclinação opcional (+ para trás, − para a frente); sem valor, as traseiras ficam 20° para trás
+    const ang = (p.ang !== undefined && p.ang !== null ? p.ang : (p.lx < -10 ? 20 : 0)) * Math.PI / 180;
+    const v = M(-Math.sin(ang) * lenM, p.lado * Math.cos(ang) * lenM);
+    pts = [[p.lx, p.ly], [p.lx + v[0], p.ly + v[1]]];
+  }
   return pts.map(q => aeroParaMundo(q[0], q[1]));
 }
 function pontaEscorregadeira(p, t = 1) {
@@ -1057,14 +1065,14 @@ function desenharPessoas() {
     const p = portas[q.porta];
     const w = pontaEscorregadeira(p, q.t);
     ctx.strokeStyle = 'rgba(0,0,0,0.7)'; ctx.lineWidth = k;
-    ctx.fillStyle = '#e0f2fe'; ctx.beginPath(); ctx.arc(w.x, w.y - 2, 1.3, 0, Math.PI*2); ctx.fill(); ctx.stroke();
-    ctx.fillStyle = '#0ea5e9'; ctx.fillRect(w.x - 1.5, w.y - 0.7, 3, 3.6);
+    ctx.fillStyle = '#e0f2fe'; ctx.beginPath(); ctx.arc(w.x, w.y - 0.8, 0.5, 0, Math.PI*2); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = '#0ea5e9'; ctx.fillRect(w.x - 0.6, w.y - 0.3, 1.2, 1.5);
   }
   // passageiros guiados pelo CRS: andam da aeronave até a área de reunião atrás do CRS, perto do PCM
   for (const q of caminhantes) {
     ctx.strokeStyle = 'rgba(0,0,0,0.7)'; ctx.lineWidth = k;
-    ctx.fillStyle = '#fde68a'; ctx.beginPath(); ctx.arc(q.x, q.y - 2, 1.3, 0, Math.PI*2); ctx.fill(); ctx.stroke();
-    ctx.fillStyle = q.chegou ? '#22c55e' : '#f59e0b'; ctx.fillRect(q.x - 1.5, q.y - 0.7, 3, 3.6);
+    ctx.fillStyle = '#fde68a'; ctx.beginPath(); ctx.arc(q.x, q.y - 0.8, 0.5, 0, Math.PI*2); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = q.chegou ? '#22c55e' : '#f59e0b'; ctx.fillRect(q.x - 0.6, q.y - 0.3, 1.2, 1.5);
   }
 }
 function atualizarPortas() {
@@ -2280,9 +2288,9 @@ const AERONAVES_PADRAO = [
              {nome:'asa esq.',x:1.5,lado:-1,tipo:'asa'}, {nome:'asa dir.',x:1.5,lado:1,tipo:'asa'},
              {nome:'traseira esq.',x:-11,lado:-1,tipo:'porta'}, {nome:'traseira dir.',x:-11,lado:1,tipo:'porta'} ] },
   { id:'a320', nome:'Airbus A320', comp:37.6, env:35.8, pax:174, comb:'12.000 kg',
-    portas:[ {nome:'frente esq.',x:13,lado:-1,tipo:'porta'}, {nome:'frente dir.',x:13,lado:1,tipo:'porta'},
-             {nome:'asa esq.',x:0.5,lado:-1,tipo:'asa'}, {nome:'asa dir.',x:0.5,lado:1,tipo:'asa'},
-             {nome:'traseira esq.',x:-11.5,lado:-1,tipo:'porta'}, {nome:'traseira dir.',x:-11.5,lado:1,tipo:'porta'} ] },
+    portas:[ {nome:'porta 1 esq.',x:13,lado:-1,tipo:'porta',ang:-10,len:5.5}, {nome:'porta 1 dir.',x:13,lado:1,tipo:'porta',ang:-10,len:5.5},
+             {nome:'asa esq.',x:0.5,lado:-1,tipo:'asafus',len:4}, {nome:'asa dir.',x:0.5,lado:1,tipo:'asafus',len:4},
+             {nome:'porta 4 esq.',x:-11.5,lado:-1,tipo:'porta',ang:8,len:5.5}, {nome:'porta 4 dir.',x:-11.5,lado:1,tipo:'porta',ang:8,len:5.5} ] },
   { id:'a321', nome:'Airbus A321', comp:44.5, env:35.8, pax:220, comb:'15.000 kg',
     portas:[ {nome:'saída 1L',x:15.4,lado:-1,tipo:'porta'}, {nome:'saída 1R',x:15.4,lado:1,tipo:'porta'},
              {nome:'saída 2L',x:10.2,lado:-1,tipo:'porta'}, {nome:'saída 2R',x:10.2,lado:1,tipo:'porta'},
@@ -2307,9 +2315,12 @@ function carregarAeronaves() {
     const a = JSON.parse(localStorage.getItem('sescinc-aeronaves'));
     if (Array.isArray(a) && a.length && a.every(x => x && x.nome && x.comp > 0 && x.env > 0 && Array.isArray(x.portas) && x.portas.length)) {
       // lista salva antes do A321 existir: acrescenta o A321 uma única vez
-      if (localStorage.getItem('sescinc-aeronaves-ver') !== '2') {
+      if (localStorage.getItem('sescinc-aeronaves-ver') !== '3') {
         if (!a.some(x => x.id === 'a321')) a.push(clonar(AERONAVES_PADRAO.find(x => x.id === 'a321')));
-        localStorage.setItem('sescinc-aeronaves-ver', '2'); localStorage.setItem('sescinc-aeronaves', JSON.stringify(a));
+        // A320 atualizado conforme o esquema de evacuação do fabricante
+        const i = a.findIndex(x => x.id === 'a320'), novo = clonar(AERONAVES_PADRAO.find(x => x.id === 'a320'));
+        if (i >= 0) a[i] = novo; else a.push(novo);
+        localStorage.setItem('sescinc-aeronaves-ver', '3'); localStorage.setItem('sescinc-aeronaves', JSON.stringify(a));
       }
       return a;
     }
@@ -2326,7 +2337,7 @@ function categoriaPorComp(c) {
 // Aplica a ficha: tamanho do desenho e portas com as posições cadastradas
 function aplicarAeronaveSpec(spec) {
   AE = { sx: spec.comp / COMP_DESENHO_M, sy: spec.env / 40, spec };
-  portas = spec.portas.map((d, i) => ({ id:'P' + (i + 1), nome:d.nome, lx: d.x / (M_POR_UL * AE.sx), ly: d.lado * 9, lado:d.lado, tipo:d.tipo, armada:false, prog:0 }));
+  portas = spec.portas.map((d, i) => ({ id:'P' + (i + 1), nome:d.nome, lx: d.x / (M_POR_UL * AE.sx), ly: d.lado * 9, lado:d.lado, tipo:d.tipo, ang:d.ang, len:d.len, armada:false, prog:0 }));
   $('portasList').innerHTML = '';
 }
 const selAero = $('fAeroSel');
@@ -2368,7 +2379,9 @@ function acMontarPortas() {
     r.innerHTML = '<input class="pn" style="width:92px" value="' + esc(d.nome) + '">' +
       '<input class="px" type="number" step="0.5" style="width:62px" value="' + d.x + '"> m' +
       '<select class="pl"><option value="-1">Esq.</option><option value="1">Dir.</option></select>' +
-      '<select class="pt"><option value="porta">Porta</option><option value="asa">Asa</option></select>' +
+      '<select class="pt"><option value="porta">Porta</option><option value="asa">Asa (vira na borda)</option><option value="asafus">Asa (junto à fuselagem)</option></select>' +
+      '<input class="pa" type="number" step="1" style="width:50px" placeholder="auto" title="Inclinação da escorregadeira em graus: + para trás, − para a frente"> °' +
+      '<input class="pc" type="number" step="0.5" min="1" style="width:50px" placeholder="14" title="Comprimento da escorregadeira em metros"> m' +
       '<button class="sec pr" title="Remover">✕</button>';
     box.appendChild(r);
     r.querySelector('.pl').value = String(d.lado); r.querySelector('.pt').value = d.tipo;
@@ -2376,6 +2389,10 @@ function acMontarPortas() {
     r.querySelector('.px').oninput = e => d.x = Number(e.target.value) || 0;
     r.querySelector('.pl').onchange = e => d.lado = Number(e.target.value);
     r.querySelector('.pt').onchange = e => d.tipo = e.target.value;
+    r.querySelector('.pa').value = d.ang === undefined || d.ang === null ? '' : d.ang;
+    r.querySelector('.pc').value = d.len || '';
+    r.querySelector('.pa').oninput = e => { d.ang = e.target.value === '' ? undefined : Number(e.target.value); };
+    r.querySelector('.pc').oninput = e => { d.len = e.target.value === '' ? undefined : Math.max(1, Number(e.target.value) || 1); };
     r.querySelector('.pr').onclick = () => { if (acEdit.portas.length > 1) { acEdit.portas.splice(j, 1); acMontarPortas(); } };
   });
 }
