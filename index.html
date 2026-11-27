@@ -523,8 +523,11 @@ function naAreaAT(u) {
   const a = areaPorId(u.area);
   return !!a && a.tipo === 'ACV' && DIST(u, a) <= a.r;
 }
+// No trajeto de reabastecimento (ida e volta) a viatura anda na metade da velocidade, ou seja, o dobro do tempo
+const FATOR_REAB = 0.5, TEMPO_REAB = 16;
 function mover(u, tx, ty, dt) {
-  const dx = tx - u.x, dy = ty - u.y, d = Math.hypot(dx, dy), passo = TIPOS[u.tipo].vel * dt;
+  const lento = (u.acao === 'base' || u.acao === 'volta') ? FATOR_REAB : 1;
+  const dx = tx - u.x, dy = ty - u.y, d = Math.hypot(dx, dy), passo = TIPOS[u.tipo].vel * lento * dt;
   if (d > 0) u.h = Math.atan2(dy, dx);
   if (d <= passo) { u.x = tx; u.y = ty; return true; }
   u.x += dx/d*passo; u.y += dy/d*passo;
@@ -637,7 +640,7 @@ function tick(dt) {
         if (u.rota && u.rota.length) { u.rota.shift(); if (u.rota.length) continue; }
         u.dest = null; u.rota = null;
         if (u.acao === 'base') {
-          if (TIPOS[u.tipo].tanque) { u.acao = 'reab'; u.reab = 8; } else u.acao = 'parado';
+          if (TIPOS[u.tipo].tanque) { u.acao = 'reab'; u.reab = TEMPO_REAB; } else u.acao = 'parado';
         } else if (u.acao === 'volta') { u.acao = 'parado'; u.origem = null; }
       }
       continue;
