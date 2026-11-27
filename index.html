@@ -50,11 +50,29 @@
   /* Papéis: o atendente não vê as opções de criação do cenário */
   body[data-papel="atendente"] .so-admin { display:none !important; }
   body[data-papel="apresentador"] .so-atendente { display:none !important; }
+  canvas { touch-action:none; }
+  #hud, #barra { transition:opacity .4s; }
+  body.ocioso #hud, body.ocioso #barra { opacity:0; pointer-events:none; }
+
+  /* Celular: informações recolhidas, aparecem quando o atendente toca e somem sem uso */
+  @media (max-width:700px) {
+    #hud { top:4px; left:4px; right:4px; padding:4px 6px; font-size:11px; gap:6px; }
+    #hud .stat:not(.essencial) { display:none; }
+    #hud label, #hud #cfgBtn { display:none; }
+    #zoom { top:auto; bottom:auto; top:64px; }
+    #painel { left:0; right:0; top:auto; bottom:0; width:auto; max-height:58vh; border-radius:12px 12px 0 0; }
+    body:not(.sem-painel) #barra { display:none; }
+    #barra { left:4px; right:4px; bottom:4px; padding:6px; }
+    #barra .rot { display:none; }
+    #barra.vazia { display:none; }
+    #barraNome { min-width:0; }
+    #barra button { font-size:11px; padding:6px 7px; }
+  }
 </style>
 </head>
 <body>
 <div id="entrada" style="position:fixed;inset:0;background:rgba(15,23,42,0.92);z-index:10;display:flex;align-items:center;justify-content:center;">
-  <div style="background:#1e293b;padding:20px;border-radius:12px;width:400px;">
+  <div style="background:#1e293b;padding:20px;border-radius:12px;width:min(400px,92vw);">
     <h2 style="font-size:17px;margin:0 0 8px">Modo de uso</h2>
     <p class="peq">Criar sala: você é o apresentador. Gera um código para o atendente entrar e comanda o cenário.<br>Entrar como atendente: digite o código recebido. Você comanda viaturas, áreas e ações no seu computador.<br>Modo local: tudo no seu computador, sem sincronização.</p>
     <div class="linha"><button id="modoAp">Criar sala (apresentador)</button></div>
@@ -66,8 +84,8 @@
 <canvas id="c"></canvas>
 
 <div id="hud">
-  <span class="stat">Tempo <b id="time">00:00</b></span>
-  <span class="stat">Fogo <b id="fogo">--</b></span>
+  <span class="stat essencial">Tempo <b id="time">00:00</b></span>
+  <span class="stat essencial">Fogo <b id="fogo">--</b></span>
   <span class="stat">Fumaça <b id="fumaca">--</b></span>
   <span class="stat">A bordo <b id="pax">--</b></span>
   <span class="stat">Feridos <b id="feridos">--</b></span>
@@ -895,6 +913,43 @@ function cliqueMapa(p) {
   else { selAreaId = null; }
 }
 
+// ---------- Toque (celular) ----------
+// O toque é traduzido para os mesmos eventos do mouse; dois dedos dão zoom (pinça).
+let ultimaAtividade = performance.now();
+let pinca = null;
+const marcarAtividade = () => { ultimaAtividade = performance.now(); };
+document.addEventListener('pointerdown', marcarAtividade);
+const distToque = (a, b) => Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY);
+cv.addEventListener('touchstart', e => {
+  e.preventDefault();
+  marcarAtividade();
+  if (e.touches.length >= 2) { pinca = { d: distToque(e.touches[0], e.touches[1]) }; panning = null; drag = null; return; }
+  pinca = null;
+  const t = e.touches[0];
+  cv.dispatchEvent(new MouseEvent('mousedown', { clientX:t.clientX, clientY:t.clientY, button:0, bubbles:true }));
+}, { passive:false });
+cv.addEventListener('touchmove', e => {
+  e.preventDefault();
+  marcarAtividade();
+  if (pinca && e.touches.length >= 2) {
+    const a = e.touches[0], b = e.touches[1];
+    const d = distToque(a, b), mx = (a.clientX + b.clientX)/2, my = (a.clientY + b.clientY)/2;
+    if (pinca.d > 0) zoomEm(d / pinca.d, mx, my);
+    pinca.d = d;
+    return;
+  }
+  const t = e.touches[0];
+  window.dispatchEvent(new MouseEvent('mousemove', { clientX:t.clientX, clientY:t.clientY }));
+}, { passive:false });
+cv.addEventListener('touchend', e => {
+  e.preventDefault();
+  if (pinca) { if (e.touches.length < 2) pinca = null; return; }
+  if (e.touches.length === 0) {
+    const t = e.changedTouches[0];
+    window.dispatchEvent(new MouseEvent('mouseup', { clientX:t.clientX, clientY:t.clientY, button:0 }));
+  }
+}, { passive:false });
+
 // Clique no mapa com o painel de configuração aberto marca a base
 cv.addEventListener('click', e => {
   if (!cfgAberta) return;
@@ -956,6 +1011,7 @@ $('barraRem').onclick = () => {
 
 function atualizarBarra() {
   const u = unidadePorId(selId), a = areaPorId(selAreaId);
+  $('barra').classList.toggle('vazia', !u && !a && !placing);
   const key = (u ? 'u' + u.id + '|' + u.acao + '|' + (u.area || '') : a ? 'a' + a.id : 'n') + '|' + estado + '|' + areas.map(x => x.id).join(',');
   if (key === barraKey) return;
   barraKey = key;
@@ -1414,8 +1470,12 @@ function loop(t) {
   if (papel !== 'atendente') tick(dt * Number($('vel').value));
   desenhar();
   atualizarUI();
+  // Celular: informações somem após 6 s sem toque, exceto com viatura selecionada ou em posicionamento
+  const celular = matchMedia('(max-width:700px)').matches;
+  document.body.classList.toggle('ocioso', celular && !placing && !selId && !selAreaId && !modoTrajeto && performance.now() - ultimaAtividade > 6000);
   requestAnimationFrame(loop);
 }
+if (matchMedia('(max-width:700px)').matches) setPainel(false);
 requestAnimationFrame(loop);
 </script>
 </body>
