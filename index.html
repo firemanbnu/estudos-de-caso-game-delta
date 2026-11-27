@@ -507,10 +507,13 @@ function criarArea(tipo, x, y) {
 const areaPorId = id => areas.find(a => a.id === id) || null;
 const unidadePorId = id => unidades.find(u => u.id === id) || null;
 function unidadeEm(p) {
-  // tolerância em pixels de tela, para tocar a viatura com o dedo mesmo com o mapa afastado
-  const tol = Math.max(22, 28 / cam.s);
-  for (let i = unidades.length - 1; i >= 0; i--) if (DIST(unidades[i], p) <= tol) return unidades[i];
-  return null;
+  // Tolerância em pixels de tela (dedo ou mouse). Vence a viatura cujo centro está mais perto do toque;
+  // se ela já está selecionada e há outra muito próxima, o toque seguinte alterna para a vizinha.
+  const tol = (matchMedia('(pointer:coarse)').matches ? 22 : 15) / cam.s;
+  const cands = unidades.map(u => ({ u, d:DIST(u, p) })).filter(c => c.d <= tol).sort((a, b) => a.d - b.d);
+  if (!cands.length) return null;
+  if (cands.length > 1 && cands[0].u.id === selId) return cands[1].u;
+  return cands[0].u;
 }
 // Formas: triagem e transporte são retângulos; concentração e demais áreas são círculos
 function dentroArea(a, p) {
@@ -1290,7 +1293,8 @@ function desenhar() {
   }
 
   desenharJatos();
-  for (const u of unidades) desenharVeiculo(u);
+  for (const u of unidades) if (u.id !== selId) desenharVeiculo(u);
+  { const su = unidadePorId(selId); if (su) desenharVeiculo(su); }
   // vinheta suave nas bordas da tela
   ctx.setTransform(1,0,0,1,0,0);
   const vg = ctx.createRadialGradient(cv.width/2, cv.height/2, Math.min(cv.width, cv.height)*0.45, cv.width/2, cv.height/2, Math.max(cv.width, cv.height)*0.75);
