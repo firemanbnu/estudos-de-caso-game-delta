@@ -279,7 +279,7 @@ const IMG_W = 1865, IMG_H = 621;
 const ZONA = { x1:350, x2:1450, y1:335, y2:365 };
 const BASE_PADRAO = { x:830, y:455 };
 const IMG = new Image();
-IMG.src = 'navegantes-satelite-2x.jpg'; // versão 2x (HD) para ampliar sem perder nitidez
+IMG.src = 'navegantes-satelite-2x.webp'; // versão 2x (HD) para ampliar sem perder nitidez
 const BASE = { x:BASE_PADRAO.x, y:BASE_PADRAO.y };
 
 // ---------- Utilidades ----------
@@ -1009,6 +1009,7 @@ function desenhar() {
   ctx.setTransform(cam.s, 0, 0, cam.s, cam.ox, cam.oy);
   const k = 1/cam.s;
 
+  ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
   if (IMG.complete && IMG.naturalWidth > 0) ctx.drawImage(IMG, 0, 0, IMG_W, IMG_H);
   else { ctx.fillStyle = '#2c3a2e'; ctx.fillRect(0, 0, IMG_W, IMG_H); }
 
