@@ -71,6 +71,70 @@
     #barraNome { min-width:0; }
     #barra button { font-size:11px; padding:6px 7px; }
   }
+
+  /* ===== Tema visual (painéis de vidro, cores de emergência) ===== */
+  :root { --vidro:rgba(13,20,33,0.82); --borda:rgba(148,163,184,0.18); --acento:#f97316; --azul:#3b82f6; }
+  #hud, #painel, #barra, #menuUnid, #zoom button, #dock .card, #toast {
+    backdrop-filter:blur(10px); -webkit-backdrop-filter:blur(10px);
+  }
+  #hud { background:var(--vidro); border:1px solid var(--borda); border-radius:12px; box-shadow:0 6px 20px rgba(0,0,0,.35); padding:6px 12px; }
+  #hud .stat { background:rgba(255,255,255,0.05); border:1px solid var(--borda); border-radius:999px; padding:3px 10px; color:#94a3b8; font-size:12px; }
+  #hud .stat b { color:#f8fafc; margin-left:3px; font-variant-numeric:tabular-nums; }
+  #hud .stat.alerta { border-color:rgba(239,68,68,.6); background:rgba(239,68,68,.15); }
+  #hud .stat.alerta b { color:#fca5a5; }
+  #painel { background:var(--vidro); border:1px solid var(--borda); border-radius:14px; box-shadow:0 8px 28px rgba(0,0,0,.4); }
+  #painel section { border-bottom:1px solid var(--borda); padding-bottom:10px; margin-bottom:10px; }
+  #painel h2 { font-size:12px; text-transform:uppercase; letter-spacing:.08em; color:#fb923c; }
+  button { transition:transform .08s, filter .15s, background .15s; box-shadow:0 1px 0 rgba(255,255,255,.12) inset, 0 2px 6px rgba(0,0,0,.25); font-weight:600; border-radius:7px; }
+  button:hover:not(:disabled) { filter:brightness(1.15); }
+  button:active:not(:disabled) { transform:translateY(1px) scale(.98); }
+  button { background:linear-gradient(180deg,#3b82f6,#2563eb); }
+  button.sec { background:linear-gradient(180deg,#475569,#334155); }
+  button.ativo { background:linear-gradient(180deg,#fbbf24,#f59e0b); color:#111; }
+  button:disabled { background:#374151; color:#9ca3af; box-shadow:none; }
+  #barra { background:var(--vidro); border:1px solid var(--borda); border-radius:14px; box-shadow:0 8px 28px rgba(0,0,0,.4); }
+  #barra [data-add="AB"], #barra [data-add="AP"], #barra [data-add="UR"] { background:linear-gradient(180deg,#facc15,#eab308); color:#1f2937; }
+  #barra [data-add="AMB"] { background:linear-gradient(180deg,#f8fafc,#e2e8f0); color:#b91c1c; }
+  #barra [data-add="CMD"] { background:linear-gradient(180deg,#a855f7,#7e22ce); }
+  #menuUnid { background:var(--vidro); border:1px solid var(--borda); border-radius:12px; animation:surge .12s ease-out; }
+  #menuUnid button { background:rgba(255,255,255,0.06); box-shadow:none; font-weight:500; }
+  #menuUnid button:hover { background:rgba(249,115,22,.35); }
+  @keyframes surge { from { opacity:0; transform:scale(.94); } to { opacity:1; transform:none; } }
+  #zoom { top:116px; }
+  #zoom button { background:var(--vidro); border:1px solid var(--borda); width:52px; height:36px; font-size:12px; padding:0; }
+  input, select, textarea { background:rgba(2,6,23,.6); border-color:var(--borda); border-radius:7px; padding:6px; }
+  .row { border-radius:8px; padding:7px 8px; margin:3px 0; background:rgba(255,255,255,0.03); }
+  .row.sel { border-color:var(--acento); background:rgba(249,115,22,.12); }
+  .bar { height:7px; background:rgba(255,255,255,.08); }
+  .bar > div { background:linear-gradient(90deg,#38bdf8,#0ea5e9); transition:width .3s; }
+  #entrada > div { background:linear-gradient(160deg,#1e293b,#0f172a); border:1px solid var(--borda); box-shadow:0 20px 60px rgba(0,0,0,.6); border-radius:16px; padding:24px; }
+  #entrada h2::before { content:'SESCINC · ARFF'; display:block; font-size:11px; letter-spacing:.2em; color:#fb923c; margin-bottom:4px; }
+  #entrada button { width:100%; padding:10px; }
+  #entrada #codEntrada { flex:1; }
+  #entrada #modoAt { width:auto; }
+
+  /* Barra de viaturas: um cartão por unidade, toque seleciona e centraliza */
+  #dock { position:fixed; left:60px; right:356px; top:58px; display:flex; gap:6px; overflow-x:auto; z-index:2; scrollbar-width:none; pointer-events:none; }
+  #dock::-webkit-scrollbar { display:none; }
+  body.sem-painel #dock { right:8px; }
+  #dock .card { pointer-events:auto; flex:0 0 auto; min-width:92px; background:var(--vidro); border:1px solid var(--borda); border-radius:10px; padding:5px 8px; cursor:pointer; font-size:11px; color:#cbd5e1; }
+  #dock .card.sel { border-color:var(--acento); box-shadow:0 0 0 1px var(--acento), 0 0 14px rgba(249,115,22,.45); }
+  #dock .card b { display:flex; align-items:center; gap:5px; color:#fff; font-size:12px; }
+  #dock .card .dot { width:9px; height:9px; border-radius:3px; display:inline-block; }
+  #dock .card .st { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:130px; display:block; margin-top:1px; }
+  #dock .card .bar { height:4px; margin:3px 0 0; }
+  #dock .card.atuando .st { color:#fdba74; }
+
+  /* Avisos flutuantes */
+  #toast { position:fixed; left:50%; top:104px; transform:translateX(-50%) translateY(-8px); background:var(--vidro); border:1px solid rgba(251,191,36,.4); color:#fde68a; padding:8px 14px; border-radius:10px; font-size:13px; z-index:7; opacity:0; pointer-events:none; transition:opacity .25s, transform .25s; max-width:min(520px,90vw); text-align:center; white-space:pre-line; }
+  #toast.on { opacity:1; transform:translateX(-50%); }
+  @media (max-width:700px) {
+    #dock { left:4px; right:4px; top:40px; }
+    #zoom { top:auto; left:auto; right:6px; bottom:200px; }
+    #zoom button { width:44px; height:34px; }
+    #toast { top:96px; font-size:12px; }
+    body.ocioso #dock { opacity:0; pointer-events:none; }
+  }
 </style>
 </head>
 <body>
@@ -111,6 +175,8 @@
   <button id="zCentro" class="sec" title="Centralizar na aeronave, ou na base se não houver caso (tecla C)">Centro</button>
 </div>
 
+<div id="dock"></div>
+<div id="toast"></div>
 <div id="menuUnid" style="display:none"></div>
 <div id="barra">
   <div class="linha">
@@ -304,9 +370,11 @@ const cv = $('c'), ctx = cv.getContext('2d');
 const cam = { s:1, ox:0, oy:0, fit:1, user:false };
 function toWorld(sx, sy) { return { x:(sx - cam.ox)/cam.s, y:(sy - cam.oy)/cam.s }; }
 // Tamanho base da cena: começa 2x maior que a tela inteira; textos e ícones usam esta referência
-function zt() { return 1/(cam.fit*2); }
+// Escala inicial: 2x a visão do mapa inteiro, ou o bastante para preencher a tela (celular em pé)
+function escalaInicial() { return Math.max(cam.fit*2, Math.max(innerWidth/IMG_W, innerHeight/IMG_H)); }
+function zt() { return 1/escalaInicial(); }
 function resetCam() {
-  cam.user = false; cam.s = cam.fit*2;
+  cam.user = false; cam.s = escalaInicial();
   cam.ox = (innerWidth - IMG_W*cam.s)/2; cam.oy = (innerHeight - IMG_H*cam.s)/2;
 }
 function clampCam() {
@@ -322,7 +390,7 @@ function ajustarTela() {
 // Zoom em torno de um ponto da tela (roda do mouse e botões)
 function zoomEm(f, sx, sy) {
   const w0 = toWorld(sx, sy);
-  cam.s = clamp(cam.s * f, cam.fit, cam.fit * 12);
+  cam.s = clamp(cam.s * f, cam.fit, escalaInicial() * 8);
   cam.ox = sx - w0.x * cam.s; cam.oy = sy - w0.y * cam.s;
   cam.user = true; clampCam();
 }
@@ -330,7 +398,7 @@ function zoomEm(f, sx, sy) {
 function centralizar() {
   const alvo = inc ? { x:inc.x, y:inc.y } : { x:BASE.x, y:BASE.y };
   const vw = innerWidth - (painelAberto ? 350 : 0);
-  cam.s = clamp(Math.max(cam.s, cam.fit * 2), cam.fit, cam.fit * 12);
+  cam.s = clamp(Math.max(cam.s, escalaInicial() * 1.5), cam.fit, escalaInicial() * 8);
   cam.ox = vw/2 - alvo.x * cam.s; cam.oy = innerHeight/2 - alvo.y * cam.s;
   cam.user = true; clampCam();
 }
@@ -675,22 +743,39 @@ function portaBloqueada(p) {
   return inc.focos.some(f => { const q = aeroParaMundo(f.lx, f.ly); return Math.hypot(q.x - d.x, q.y - d.y) < 30; });
 }
 // Chamas animadas: várias línguas de fogo oscilando em cada foco
+// Chama com brilho: halo de luz, línguas de fogo e brasas, somando luz sobre o mapa
+function chama(x, y, base, t, semente) {
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+  const pulso = 1 + 0.08*Math.sin(t*13 + semente);
+  // halo de luz no chão
+  let g = ctx.createRadialGradient(x, y, 0, x, y, base*2.6*pulso);
+  g.addColorStop(0, 'rgba(255,120,20,0.65)'); g.addColorStop(0.45, 'rgba(255,60,0,0.25)'); g.addColorStop(1, 'rgba(255,60,0,0)');
+  ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, base*2.6*pulso, 0, Math.PI*2); ctx.fill();
+  // línguas de fogo
+  for (let i = 0; i < 9; i++) {
+    const a = i*0.7 + semente, f = (t*1.8 + i*0.37 + semente) % 1;
+    const dx = Math.cos(a)*base*0.55*(1-f) + Math.sin(t*7 + i)*base*0.12;
+    const dy = Math.sin(a)*base*0.45*(1-f) - f*base*0.9;
+    const r = base*(0.55 - 0.4*f)*(0.85 + 0.15*Math.sin(t*17 + i));
+    g = ctx.createRadialGradient(x+dx, y+dy, 0, x+dx, y+dy, r);
+    g.addColorStop(0, 'rgba(255,240,180,0.85)'); g.addColorStop(0.3, 'rgba(255,140,20,0.8)'); g.addColorStop(0.7, 'rgba(220,40,0,0.45)'); g.addColorStop(1, 'rgba(180,20,0,0)');
+    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x+dx, y+dy, r, 0, Math.PI*2); ctx.fill();
+  }
+  // brasas subindo
+  for (let i = 0; i < 6; i++) {
+    const f = (t*0.9 + i/6 + semente*0.1) % 1;
+    const ex = x + Math.sin(i*3.1 + t*2)*base*0.8, ey = y - f*base*2.2;
+    ctx.fillStyle = 'rgba(255,200,80,' + (1-f).toFixed(2) + ')';
+    ctx.beginPath(); ctx.arc(ex, ey, base*0.06 + 0.15, 0, Math.PI*2); ctx.fill();
+  }
+  ctx.restore();
+}
 function desenharFogo() {
   if (!inc || inc.fogo <= 0 || !inc.focos) return;
   const t = performance.now() / 1000;
-  const base = 6 + inc.fogo * 0.16;
-  for (const foco of inc.focos) {
-    const p = aeroParaMundo(foco.lx, foco.ly);
-    for (let i = 0; i < 5; i++) {
-      const a = i * 1.26 + t * 3;
-      const dx = Math.cos(a) * base * 0.35 * (0.6 + 0.4 * Math.sin(t * 9 + i));
-      const dy = Math.sin(a) * base * 0.35;
-      const r = base * (0.45 + 0.2 * Math.sin(t * 11 + i * 2));
-      ctx.fillStyle = i % 2 ? 'rgba(255,90,0,0.7)' : 'rgba(255,170,0,0.75)';
-      ctx.beginPath(); ctx.arc(p.x + dx, p.y + dy, r, 0, Math.PI*2); ctx.fill();
-    }
-    ctx.fillStyle = 'rgba(255,235,120,0.9)'; ctx.beginPath(); ctx.arc(p.x, p.y, base * 0.3, 0, Math.PI*2); ctx.fill();
-  }
+  const base = (5 + inc.fogo * 0.12);
+  inc.focos.forEach((foco, i) => { const p = aeroParaMundo(foco.lx, foco.ly); chama(p.x, p.y, base, t, i*1.7); });
 }
 // Fumaça que sai do foco principal e é levada pelo vento. Densidade, área e vento são controlados pelo administrador.
 function desenharFumaca() {
@@ -705,9 +790,13 @@ function desenharFumaca() {
     const fase = (t * 0.35 + i / n) % 1;
     const d = fase * 60 * K;
     const x = o0.x + vx * d + Math.sin(i * 2) * 4 * K, y = o0.y + vy * d + Math.cos(i * 2) * 3 * K;
-    ctx.globalAlpha = (1 - fase) * Math.min(0.75, inc.fumaca / 100);
-    ctx.fillStyle = '#d1d5db';
-    ctx.beginPath(); ctx.arc(x, y, (6 + fase * 22) * K, 0, Math.PI*2); ctx.fill();
+    const r = (6 + fase * 22) * K, alfa = (1 - fase) * Math.min(0.7, inc.fumaca / 100);
+    const cinza = Math.round(70 + fase * 110);
+    const g = ctx.createRadialGradient(x, y, 0, x, y, r);
+    g.addColorStop(0, 'rgba(' + cinza + ',' + cinza + ',' + (cinza + 6) + ',' + alfa.toFixed(3) + ')');
+    g.addColorStop(1, 'rgba(' + cinza + ',' + cinza + ',' + cinza + ',0)');
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI*2); ctx.fill();
   }
   ctx.globalAlpha = 1;
 }
@@ -773,7 +862,9 @@ function comandarAcao(u, act) {
     if (alvos.length) {
       let q = alvos[0], dmin = Infinity;
       for (const a of alvos) { const d = Math.hypot(a.x - u.x, a.y - u.y); if (d < dmin) { dmin = d; q = a; } }
-      const ang = Math.atan2(u.y - q.y, u.x - q.x);
+      // abre o ângulo conforme outras viaturas já combatem este foco, para não pararem no mesmo ponto
+      const outras = unidades.filter(x => x !== u && x.acao === 'combate').length;
+      const ang = Math.atan2(u.y - q.y, u.x - q.x) + (outras % 2 ? 1 : -1) * Math.ceil(outras / 2) * 0.55;
       executar({ tipo:'ataque', id:u.id, acao:'combate', x: q.x + Math.cos(ang)*q.raio, y: q.y + Math.sin(ang)*q.raio });
       $('msg').textContent = u.id + ': ' + ACAO_ROTULO.combate + '.';
       return;
@@ -810,8 +901,9 @@ function desenharEscorregadeiras() {
       ctx.fillStyle = bloq ? '#ef4444' : '#fde68a';
       ctx.beginPath(); ctx.arc(e.x, e.y, 3*k, 0, Math.PI*2); ctx.fill();
     }
-    ctx.font = `bold ${9*zt()}px sans-serif`; ctx.fillStyle = '#fff'; ctx.strokeStyle = 'rgba(0,0,0,0.8)'; ctx.lineWidth = 3*k;
-    ctx.strokeText(p.id, d.x - 4, d.y - 6); ctx.fillText(p.id, d.x - 4, d.y - 6);
+    if (cam.s < escalaInicial() * 2.5 && !p.armada) continue;
+    ctx.font = `bold ${7*zt()}px sans-serif`; ctx.fillStyle = '#fff'; ctx.strokeStyle = 'rgba(0,0,0,0.8)'; ctx.lineWidth = 2.5*k;
+    ctx.strokeText(p.id, d.x - 3*zt(), d.y - 3*zt()); ctx.fillText(p.id, d.x - 3*zt(), d.y - 3*zt());
   }
 }
 function desenharPessoas() {
@@ -888,11 +980,11 @@ function desenharOcorrencias() {
       const rot = o.id + (o.espuma ? ' · espuma' : ' · combustível');
       ctx.strokeText(rot, o.x - o.r, o.y - o.r - 4*k); ctx.fillText(rot, o.x - o.r, o.y - o.r - 4*k);
     } else {
-      const base = 3 + o.int*0.08;
-      for (let i = 0; i < 7; i++) {
-        const a = i*0.9 + t*3, d = o.r*0.45*(0.5 + 0.5*Math.sin(t*6 + i));
-        ctx.fillStyle = i % 2 ? 'rgba(255,90,0,0.75)' : 'rgba(255,170,0,0.8)';
-        ctx.beginPath(); ctx.arc(o.x + Math.cos(a)*d, o.y + Math.sin(a)*d, base*(0.5 + 0.25*Math.sin(t*9 + i)), 0, Math.PI*2); ctx.fill();
+      ctx.fillStyle = 'rgba(20,12,8,0.45)'; ctx.beginPath(); ctx.arc(o.x, o.y, o.r*0.9, 0, Math.PI*2); ctx.fill();
+      const base = 3 + o.int*0.06;
+      for (let i = 0; i < 3; i++) {
+        const a = i*2.1 + o.x*0.01, d = o.r*0.4;
+        chama(o.x + Math.cos(a)*d, o.y + Math.sin(a)*d, base, t, i*2.3 + o.x*0.01);
       }
       ctx.font = `bold ${9*zt()}px sans-serif`; ctx.lineWidth = 3*k; ctx.strokeStyle = 'rgba(0,0,0,0.8)'; ctx.fillStyle = '#fff';
       const rot = o.id + ' · ' + Math.round(o.int) + '%' + (o.propaga ? ' · propagando' : '');
@@ -951,8 +1043,11 @@ function desenharVeiculo(u) {
   const sx = VEH_ESC * (cm / M_POR_PX) / L, sy = VEH_ESC * (lm / M_POR_PX) / Wd;
   const lw = k / ((sx + sy) / 2);   // espessura de linha constante na tela
   if (u.id === selId) {
-    ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.5*k; ctx.setLineDash([3*k, 2*k]);
-    ctx.beginPath(); ctx.arc(u.x, u.y, 12*zt(), 0, Math.PI*2); ctx.stroke(); ctx.setLineDash([]);
+    const f = (performance.now()/1000*1.2) % 1;
+    ctx.fillStyle = 'rgba(249,115,22,0.18)'; ctx.beginPath(); ctx.arc(u.x, u.y, 11*zt(), 0, Math.PI*2); ctx.fill();
+    ctx.strokeStyle = '#fb923c'; ctx.lineWidth = 1.8*k; ctx.beginPath(); ctx.arc(u.x, u.y, 11*zt(), 0, Math.PI*2); ctx.stroke();
+    ctx.strokeStyle = 'rgba(251,146,60,' + (1-f).toFixed(2) + ')'; ctx.lineWidth = 1.2*k;
+    ctx.beginPath(); ctx.arc(u.x, u.y, (11 + f*8)*zt(), 0, Math.PI*2); ctx.stroke();
   }
   ctx.save();
   ctx.translate(u.x, u.y); ctx.rotate(u.h || 0); ctx.scale(sx, sy);
@@ -985,17 +1080,22 @@ function desenharVeiculo(u) {
   // número da unidade: distintivo de tamanho fixo na tela, sobre a viatura
   const num = (u.id.match(/\d+$/) || [])[0];
   if (num) {
-    ctx.fillStyle = '#ffffff'; ctx.beginPath(); ctx.arc(u.x, u.y, 5*zt(), 0, Math.PI*2); ctx.fill();
-    ctx.fillStyle = '#111'; ctx.font = `bold ${7*zt()}px sans-serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.fillText(num, u.x, u.y + 0.5*zt());
+    const bx = u.x + 9*zt(), by = u.y + 6*zt();
+    ctx.fillStyle = '#ffffff'; ctx.beginPath(); ctx.arc(bx, by, 4.5*zt(), 0, Math.PI*2); ctx.fill();
+    ctx.strokeStyle = 'rgba(0,0,0,0.6)'; ctx.lineWidth = k; ctx.stroke();
+    ctx.fillStyle = '#111'; ctx.font = `bold ${6.5*zt()}px sans-serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(num, bx, by + 0.5*zt());
     ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
   }
   // luzes de emergência: piscam quando a unidade está em operação ou deslocamento
   if (u.acao !== 'parado' || u.dest) {
     const fase = Math.floor(performance.now() / 110) % 2;
-    ctx.fillStyle = fase ? 'rgba(239,68,68,0.9)' : 'rgba(59,130,246,0.9)';
-    ctx.beginPath(); ctx.arc(u.x + 3*zt(), u.y - 7*zt(), 2.2*zt(), 0, Math.PI*2); ctx.fill();
-    ctx.strokeStyle = 'rgba(0,0,0,0.6)'; ctx.lineWidth = k; ctx.stroke();
+    const lx = u.x + 3*zt(), ly = u.y - 7*zt(), cor = fase ? '239,68,68' : '59,130,246';
+    ctx.save(); ctx.globalCompositeOperation = 'lighter';
+    const gl = ctx.createRadialGradient(lx, ly, 0, lx, ly, 7*zt());
+    gl.addColorStop(0, 'rgba(' + cor + ',0.7)'); gl.addColorStop(1, 'rgba(' + cor + ',0)');
+    ctx.fillStyle = gl; ctx.beginPath(); ctx.arc(lx, ly, 7*zt(), 0, Math.PI*2); ctx.fill(); ctx.restore();
+    ctx.fillStyle = 'rgba(' + cor + ',1)'; ctx.beginPath(); ctx.arc(lx, ly, 1.8*zt(), 0, Math.PI*2); ctx.fill();
   }
   // identificação
   ctx.font = `bold ${11*zt()}px sans-serif`; ctx.lineWidth = 3*k;
@@ -1041,10 +1141,16 @@ function desenhar() {
   }
 
   // base SESCINC
-  ctx.fillStyle = '#b91c1c'; ctx.fillRect(BASE.x - 8, BASE.y - 8, 16, 16);
-  ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.5*k; ctx.strokeRect(BASE.x - 8, BASE.y - 8, 16, 16);
-  ctx.fillStyle = '#fff'; ctx.strokeStyle = 'rgba(0,0,0,0.75)'; ctx.lineWidth = 3*k;
-  txt('SESCINC', BASE.x - 30, BASE.y + 24);
+  {
+    const z = zt(), bx = BASE.x, by = BASE.y;
+    ctx.fillStyle = 'rgba(0,0,0,0.35)'; ctx.beginPath(); ctx.arc(bx + 1.5*z, by + 2*z, 9*z, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle = '#b91c1c'; ctx.beginPath(); ctx.arc(bx, by, 9*z, 0, Math.PI*2); ctx.fill();
+    ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.5*z; ctx.stroke();
+    ctx.fillStyle = '#fff'; ctx.font = `bold ${8*z}px sans-serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText('B', bx, by + 0.5*z); ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+    ctx.font = `bold ${11*z}px sans-serif`; ctx.strokeStyle = 'rgba(0,0,0,0.75)'; ctx.lineWidth = 3*k; ctx.fillStyle = '#fff';
+    txt('SESCINC', bx - 22*z, by + 21*z);
+  }
 
   desenharOcorrencias();
 
@@ -1056,7 +1162,7 @@ function desenhar() {
     desenharAviao(inc.x, inc.y, inc.h);
     desenharFogo();
     ctx.fillStyle = '#fff'; ctx.strokeStyle = 'rgba(0,0,0,0.75)'; ctx.lineWidth = 3*k;
-    txt('Pax ' + inc.pax, inc.x - 30, inc.y - 38);
+    txt('Pax ' + inc.pax, inc.x - 14*zt(), inc.y - 20*zt());
   }
 
   // O atendente não vê a aeronave, a trajetória nem as escorregadeiras antes do início do cenário
@@ -1066,9 +1172,21 @@ function desenhar() {
   if (!inc && apresentador) desenharAeronavePreview();
   if (apresentador) desenharTrajeto();
   // destinos
-  ctx.setLineDash([5*k, 4*k]); ctx.lineWidth = 1.5*k; ctx.strokeStyle = 'rgba(255,255,255,0.7)';
-  for (const u of unidades) if (u.dest) { ctx.beginPath(); ctx.moveTo(u.x, u.y); ctx.lineTo(u.dest.x, u.dest.y); ctx.stroke(); }
-  ctx.setLineDash([]);
+  {
+    const tt = performance.now() / 1000;
+    for (const u of unidades) if (u.dest) {
+      const sel = u.id === selId;
+      ctx.setLineDash([5*k, 4*k]); ctx.lineDashOffset = -tt*20*k;
+      ctx.lineWidth = (sel ? 2 : 1.2)*k; ctx.strokeStyle = sel ? 'rgba(251,146,60,0.9)' : 'rgba(255,255,255,0.5)';
+      ctx.beginPath(); ctx.moveTo(u.x, u.y); ctx.lineTo(u.dest.x, u.dest.y); ctx.stroke();
+      ctx.setLineDash([]); ctx.lineDashOffset = 0;
+      // alvo pulsante no destino
+      const f = (tt*1.5) % 1;
+      ctx.strokeStyle = 'rgba(251,146,60,' + (1-f).toFixed(2) + ')'; ctx.lineWidth = 1.5*k;
+      ctx.beginPath(); ctx.arc(u.dest.x, u.dest.y, (3 + f*9)*zt(), 0, Math.PI*2); ctx.stroke();
+      ctx.fillStyle = '#fb923c'; ctx.beginPath(); ctx.arc(u.dest.x, u.dest.y, 1.6*zt(), 0, Math.PI*2); ctx.fill();
+    }
+  }
 
   // pré-visualização da base (configuração)
   if (cfgAberta && cfgPrev) {
@@ -1080,6 +1198,11 @@ function desenhar() {
 
   desenharJatos();
   for (const u of unidades) desenharVeiculo(u);
+  // vinheta suave nas bordas da tela
+  ctx.setTransform(1,0,0,1,0,0);
+  const vg = ctx.createRadialGradient(cv.width/2, cv.height/2, Math.min(cv.width, cv.height)*0.45, cv.width/2, cv.height/2, Math.max(cv.width, cv.height)*0.75);
+  vg.addColorStop(0, 'rgba(0,0,0,0)'); vg.addColorStop(1, 'rgba(0,0,0,0.38)');
+  ctx.fillStyle = vg; ctx.fillRect(0, 0, cv.width, cv.height);
 }
 
 // ---------- Interação com o mapa ----------
@@ -1330,6 +1453,60 @@ function atualizarSel() {
   if (key !== selKey) { selKey = key; $('selInfo').innerHTML = html; }
 }
 
+// Cartões das viaturas no topo: toque seleciona e centraliza a câmera na unidade
+let dockKey = '';
+function atualizarDock() {
+  const key = unidades.map(u => {
+    const tq = TIPOS[u.tipo].tanque ? Math.round(u.tanque / TIPOS[u.tipo].tanque * 20) : -1;
+    return u.id + '|' + statusDe(u) + '|' + (u.id === selId) + '|' + tq;
+  }).join(';');
+  if (key === dockKey) return;
+  dockKey = key;
+  const d = $('dock'); d.innerHTML = '';
+  unidades.forEach((u, i) => {
+    const t = TIPOS[u.tipo], c = document.createElement('div');
+    const st = statusDe(u);
+    c.className = 'card' + (u.id === selId ? ' sel' : '') + (/^Atuando|Aplicando/.test(st) ? ' atuando' : '');
+    const pct = t.tanque ? Math.max(0, Math.round(u.tanque / t.tanque * 100)) : null;
+    c.title = 'Tecla ' + (i + 1 <= 9 ? i + 1 : '') + ' · ' + st;
+    c.innerHTML = '<b><span class="dot" style="background:' + t.cor + '"></span>' + u.id + '</b><span class="st">' + st + '</span>' +
+      (pct !== null ? '<div class="bar"><div style="width:' + pct + '%"></div></div>' : '');
+    c.onclick = () => focarUnidade(u.id);
+    d.appendChild(c);
+  });
+}
+function focarUnidade(id) {
+  const u = unidadePorId(id); if (!u) return;
+  selecionarUnidade(u.id);
+  const vw = innerWidth - (painelAberto ? 350 : 0);
+  cam.s = clamp(Math.max(cam.s, escalaInicial() * 2), cam.fit, escalaInicial() * 8);
+  cam.ox = vw/2 - u.x * cam.s; cam.oy = innerHeight/2 - u.y * cam.s;
+  cam.user = true; clampCam();
+}
+// Avisos flutuantes: qualquer mensagem nova aparece por alguns segundos sobre o mapa
+(() => {
+  let tm = null, ultimo = '';
+  new MutationObserver(() => {
+    const t = $('msg').textContent.trim();
+    if (!t || t === ultimo) return;
+    ultimo = t;
+    const el = $('toast'); el.textContent = t; el.classList.add('on');
+    clearTimeout(tm); tm = setTimeout(() => el.classList.remove('on'), 3800);
+  }).observe($('msg'), { childList:true, characterData:true, subtree:true });
+})();
+// Cursor de mão sobre viaturas e áreas
+cv.addEventListener('mousemove', e => {
+  if (drag || panning || areaDrag) return;
+  const p = toWorld(e.clientX, e.clientY);
+  cv.style.cursor = placing || modoTrajeto ? 'crosshair' : (unidadeEm(p) || areaEm(p)) ? 'pointer' : 'grab';
+});
+// Atalhos: 1 a 9 seleciona e centraliza a viatura correspondente
+window.addEventListener('keydown', e => {
+  if (/INPUT|TEXTAREA|SELECT/.test(e.target.tagName)) return;
+  const n = parseInt(e.key, 10);
+  if (n >= 1 && n <= 9 && unidades[n - 1]) focarUnidade(unidades[n - 1].id);
+});
+
 function atualizarRoster() {
   const key = unidades.map(u => u.id + '|' + statusDe(u) + '|' + (u.id === selId)).join(';') + '#' +
               areas.map(a => a.id + '|' + (a.id === selAreaId)).join(';');
@@ -1417,6 +1594,7 @@ $('cfgBtn').onclick = () => cfgAberta ? fecharCfg() : abrirCfg();
 function atualizarUI() {
   $('time').textContent = mmss(tempo);
   $('fogo').textContent = inc ? Math.round(inc.fogo) + '%' : '--';
+  $('fogo').parentElement.classList.toggle('alerta', !!inc && inc.fogo > 0);
   $('fumaca').textContent = inc ? Math.round(inc.fumaca) + '%' : '--';
   $('pax').textContent = inc ? inc.pax : '--';
   $('feridos').textContent = inc ? inc.feridos : '--';
@@ -1842,6 +2020,12 @@ function loop(t) {
   }
   desenhar();
   atualizarUI();
+  atualizarDock();
+  {
+    const hb = $('hud').getBoundingClientRect().bottom;
+    $('dock').style.top = (hb + 6) + 'px';
+    if (!matchMedia('(max-width:700px)').matches) $('zoom').style.top = (hb + 64) + 'px';
+  }
   // Celular: informações somem após 6 s sem toque, exceto com viatura selecionada ou em posicionamento
   const celular = matchMedia('(max-width:700px)').matches;
   document.body.classList.toggle('ocioso', celular && !placing && !selId && !selAreaId && !modoTrajeto && performance.now() - ultimaAtividade > 6000);
