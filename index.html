@@ -2270,6 +2270,11 @@ const AERONAVES_PADRAO = [
     portas:[ {nome:'frente esq.',x:13,lado:-1,tipo:'porta'}, {nome:'frente dir.',x:13,lado:1,tipo:'porta'},
              {nome:'asa esq.',x:0.5,lado:-1,tipo:'asa'}, {nome:'asa dir.',x:0.5,lado:1,tipo:'asa'},
              {nome:'traseira esq.',x:-11.5,lado:-1,tipo:'porta'}, {nome:'traseira dir.',x:-11.5,lado:1,tipo:'porta'} ] },
+  { id:'a321', nome:'Airbus A321', comp:44.5, env:35.8, pax:220, comb:'15.000 kg',
+    portas:[ {nome:'saída 1L',x:15.4,lado:-1,tipo:'porta'}, {nome:'saída 1R',x:15.4,lado:1,tipo:'porta'},
+             {nome:'saída 2L',x:10.2,lado:-1,tipo:'porta'}, {nome:'saída 2R',x:10.2,lado:1,tipo:'porta'},
+             {nome:'saída 3L',x:-1.9,lado:-1,tipo:'porta'}, {nome:'saída 3R',x:-1.9,lado:1,tipo:'porta'},
+             {nome:'saída 4L',x:-12,lado:-1,tipo:'porta'}, {nome:'saída 4R',x:-12,lado:1,tipo:'porta'} ] },
   { id:'e195', nome:'Embraer E195', comp:38.7, env:28.7, pax:118, comb:'9.000 kg',
     portas:[ {nome:'frente esq.',x:12,lado:-1,tipo:'porta'}, {nome:'frente dir.',x:12,lado:1,tipo:'porta'},
              {nome:'asa esq.',x:-1,lado:-1,tipo:'asa'}, {nome:'asa dir.',x:-1,lado:1,tipo:'asa'},
@@ -2287,7 +2292,14 @@ let AERONAVES = [];
 function carregarAeronaves() {
   try {
     const a = JSON.parse(localStorage.getItem('sescinc-aeronaves'));
-    if (Array.isArray(a) && a.length && a.every(x => x && x.nome && x.comp > 0 && x.env > 0 && Array.isArray(x.portas) && x.portas.length)) return a;
+    if (Array.isArray(a) && a.length && a.every(x => x && x.nome && x.comp > 0 && x.env > 0 && Array.isArray(x.portas) && x.portas.length)) {
+      // lista salva antes do A321 existir: acrescenta o A321 uma única vez
+      if (localStorage.getItem('sescinc-aeronaves-ver') !== '2') {
+        if (!a.some(x => x.id === 'a321')) a.push(clonar(AERONAVES_PADRAO.find(x => x.id === 'a321')));
+        localStorage.setItem('sescinc-aeronaves-ver', '2'); localStorage.setItem('sescinc-aeronaves', JSON.stringify(a));
+      }
+      return a;
+    }
   } catch (e) {}
   return clonar(AERONAVES_PADRAO);
 }
