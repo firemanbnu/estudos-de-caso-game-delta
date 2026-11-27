@@ -638,7 +638,9 @@ function normaliza(s) { return s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]
 // Procura no texto do caso os locais citados; se nenhum for citado, usa o local típico do tipo de emergência.
 function localizarFocos(texto, casoKey) {
   const t = normaliza(texto || '');
-  let achados = LOCAIS.filter(l => l.re.test(t));
+  // "motores", "dois motores", "ambos os motores" ou "2 motores" citam os dois motores
+  const motoresPlural = /\bmotores\b|\b(dois|ambos|2)\s+motor/.test(t);
+  let achados = LOCAIS.filter(l => l.re.test(t) || (motoresPlural && l.nome.startsWith('motor')));
   if (!achados.length && LOCAL_PADRAO[casoKey]) achados = LOCAIS.filter(l => l.nome === LOCAL_PADRAO[casoKey]);
   return achados;
 }
