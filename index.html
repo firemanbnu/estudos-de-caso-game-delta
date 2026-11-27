@@ -947,11 +947,11 @@ function gerarAeroProc(q) {
 // halfW: meia largura da fuselagem (m); motor: posição do motor direito em metros (x para o nariz, y para a lateral), usada para o fogo no motor.
 const AERO_IMG = {
   a320: { src:'a320-topo.png', halfW:1.6, motor:{ x:2.6, y:5.4 } },
-  a321: { src:'a321-topo.png', halfW:2.0, motor:{ x:4.7, y:6.3 } },
+  a321: { src:'a321-topo.png', halfW:2.0, motor:{ x:5.3, y:6.1 } },
   b738: { src:'b738-topo.png', halfW:1.75, motor:{ x:4.7, y:4.7 } },
   a319: { src:'a320-topo.png', halfW:1.6, motor:{ x:2.6, y:5.4 } },
   a20n: { src:'a320-topo.png', halfW:1.6, motor:{ x:2.6, y:5.4 } },
-  a21n: { src:'a321-topo.png', halfW:2.0, motor:{ x:4.7, y:6.3 } },
+  a21n: { src:'a321-topo.png', halfW:2.0, motor:{ x:5.3, y:6.1 } },
   b38m: { src:'b738-topo.png', halfW:1.75, motor:{ x:4.7, y:4.7 } }
 };
 for (const id in PROC) AERO_IMG[id] = { gen: PROC[id], halfW: PROC[id].fw / 2, motor: PROC[id].motor };
