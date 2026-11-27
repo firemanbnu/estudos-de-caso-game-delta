@@ -1005,10 +1005,10 @@ function acaoRapida(pt) {
   if (acao) comandarAcao(u, acao);
 }
 // Trajeto da escorregadeira em coordenadas do mundo.
-// Portas: abrem a 90° com a fuselagem. Saídas sobre a asa: saem um pouco para o lado e correm para trás, paralelas à fuselagem.
+// Portas: abrem a 90° com a fuselagem. Saídas sobre a asa: sem escorregadeira na asa; as pessoas andam até a borda de fuga e escorregam pela parte de trás dela.
 function trajetoEscorregadeira(p) {
   const pts = p.tipo === 'asa'
-    ? [[p.lx, p.ly], [p.lx - 3, p.ly + p.lado * 12], [p.lx - 40, p.ly + p.lado * 12]]
+    ? [[p.lx, p.ly], [-17, p.lado * 29], [-42, p.lado * 38]]
     : [[p.lx, p.ly], [p.lx, p.ly + p.lado * 44]];
   return pts.map(q => aeroParaMundo(q[0], q[1]));
 }
@@ -1029,8 +1029,14 @@ function desenharEscorregadeiras() {
     if (!p.armada) continue;
     const w = trajetoEscorregadeira(p), e = w[w.length - 1];
     const bloq = portaBloqueada(p);
-    const tracar = () => { ctx.beginPath(); ctx.moveTo(w[0].x, w[0].y); for (let i = 1; i < w.length; i++) ctx.lineTo(w[i].x, w[i].y); ctx.stroke(); };
+    const ini = p.tipo === 'asa' ? 1 : 0;   // saída de asa: a escorregadeira só existe a partir da borda de fuga
+    const tracar = () => { ctx.beginPath(); ctx.moveTo(w[ini].x, w[ini].y); for (let i = ini + 1; i < w.length; i++) ctx.lineTo(w[i].x, w[i].y); ctx.stroke(); };
     ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    if (ini) {
+      // caminho sobre a asa: só uma linha tênue, sem escorregadeira
+      ctx.setLineDash([4*k, 4*k]); ctx.strokeStyle = 'rgba(251,146,60,0.9)'; ctx.lineWidth = 2*k;
+      ctx.beginPath(); ctx.moveTo(w[0].x, w[0].y); ctx.lineTo(w[1].x, w[1].y); ctx.stroke(); ctx.setLineDash([]);
+    }
     ctx.strokeStyle = 'rgba(0,0,0,0.5)'; ctx.lineWidth = 21*k; tracar();
     ctx.strokeStyle = bloq ? '#ef4444' : (p.tipo === 'asa' ? '#f59e0b' : '#fb923c'); ctx.lineWidth = 13.5*k; tracar();
     ctx.fillStyle = bloq ? '#ef4444' : '#fde68a';
