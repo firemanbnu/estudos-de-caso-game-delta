@@ -1004,29 +1004,38 @@ function acaoRapida(pt) {
   const acao = { AB:'combate', AP:'combate', UR:'resgate', AMB:'atendimento' }[u.tipo];
   if (acao) comandarAcao(u, acao);
 }
-// Ponta da escorregadeira: as traseiras abrem a 90° com a fuselagem; as dianteiras mantêm leve inclinação para a frente
+// Trajeto da escorregadeira em coordenadas do mundo.
+// Portas: abrem a 90° com a fuselagem. Saídas sobre a asa: saem um pouco para o lado e correm para trás, paralelas à fuselagem.
+function trajetoEscorregadeira(p) {
+  const pts = p.tipo === 'asa'
+    ? [[p.lx, p.ly], [p.lx - 3, p.ly + p.lado * 12], [p.lx - 40, p.ly + p.lado * 12]]
+    : [[p.lx, p.ly], [p.lx, p.ly + p.lado * 44]];
+  return pts.map(q => aeroParaMundo(q[0], q[1]));
+}
 function pontaEscorregadeira(p, t = 1) {
-  // sobre a asa: sai pela porta de emergência, cruza a asa e desce pela borda de fuga
-  if (p.tipo === 'asa') return aeroParaMundo(p.lx - 42 * t, p.ly + p.lado * 30 * t);
-  const avanco = p.lx < 0 ? 0 : 8;
-  return aeroParaMundo(p.lx + avanco * t, p.ly + p.lado * 44 * t);
+  const w = trajetoEscorregadeira(p);
+  let tot = 0; const seg = [];
+  for (let i = 1; i < w.length; i++) { const d = Math.hypot(w[i].x - w[i-1].x, w[i].y - w[i-1].y); seg.push(d); tot += d; }
+  let r = clamp(t, 0, 1) * tot;
+  for (let i = 0; i < seg.length; i++) {
+    if (r <= seg[i] || i === seg.length - 1) { const f = seg[i] ? Math.min(1, r / seg[i]) : 1; return { x: w[i].x + (w[i+1].x - w[i].x) * f, y: w[i].y + (w[i+1].y - w[i].y) * f }; }
+    r -= seg[i];
+  }
+  return w[w.length - 1];
 }
 function desenharEscorregadeiras() {
   const k = 1/cam.s;
   for (const p of portas) {
-    const d = aeroParaMundo(p.lx, p.ly);
-    if (p.armada) {
-      const e = pontaEscorregadeira(p);
-      const bloq = portaBloqueada(p);
-      ctx.lineCap = 'round';
-      ctx.strokeStyle = 'rgba(0,0,0,0.5)'; ctx.lineWidth = 21*k;
-      ctx.beginPath(); ctx.moveTo(d.x, d.y); ctx.lineTo(e.x, e.y); ctx.stroke();
-      ctx.strokeStyle = bloq ? '#ef4444' : (p.tipo === 'asa' ? '#f59e0b' : '#fb923c'); ctx.lineWidth = 13.5*k;
-      ctx.beginPath(); ctx.moveTo(d.x, d.y); ctx.lineTo(e.x, e.y); ctx.stroke();
-      ctx.fillStyle = bloq ? '#ef4444' : '#fde68a';
-      ctx.beginPath(); ctx.arc(e.x, e.y, 5*k, 0, Math.PI*2); ctx.fill();
-      ctx.lineCap = 'butt';
-    }
+    if (!p.armada) continue;
+    const w = trajetoEscorregadeira(p), e = w[w.length - 1];
+    const bloq = portaBloqueada(p);
+    const tracar = () => { ctx.beginPath(); ctx.moveTo(w[0].x, w[0].y); for (let i = 1; i < w.length; i++) ctx.lineTo(w[i].x, w[i].y); ctx.stroke(); };
+    ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    ctx.strokeStyle = 'rgba(0,0,0,0.5)'; ctx.lineWidth = 21*k; tracar();
+    ctx.strokeStyle = bloq ? '#ef4444' : (p.tipo === 'asa' ? '#f59e0b' : '#fb923c'); ctx.lineWidth = 13.5*k; tracar();
+    ctx.fillStyle = bloq ? '#ef4444' : '#fde68a';
+    ctx.beginPath(); ctx.arc(e.x, e.y, 5*k, 0, Math.PI*2); ctx.fill();
+    ctx.lineCap = 'butt'; ctx.lineJoin = 'miter';
   }
 }
 function desenharPessoas() {
