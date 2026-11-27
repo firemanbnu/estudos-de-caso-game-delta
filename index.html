@@ -279,7 +279,7 @@ const IMG_W = 1865, IMG_H = 621;
 const ZONA = { x1:350, x2:1450, y1:335, y2:365 };
 const BASE_PADRAO = { x:830, y:455 };
 const IMG = new Image();
-IMG.src = 'navegantes-satelite.png';
+IMG.src = 'navegantes-satelite-2x.jpg'; // versão 2x (HD) para ampliar sem perder nitidez
 const BASE = { x:BASE_PADRAO.x, y:BASE_PADRAO.y };
 
 // ---------- Utilidades ----------
@@ -303,8 +303,10 @@ aplicarBase(carregarBase() || BASE_PADRAO);
 const cv = $('c'), ctx = cv.getContext('2d');
 const cam = { s:1, ox:0, oy:0, fit:1, user:false };
 function toWorld(sx, sy) { return { x:(sx - cam.ox)/cam.s, y:(sy - cam.oy)/cam.s }; }
+// Tamanho base da cena: começa 2x maior que a tela inteira; textos e ícones usam esta referência
+function zt() { return 1/(cam.fit*2); }
 function resetCam() {
-  cam.user = false; cam.s = cam.fit;
+  cam.user = false; cam.s = cam.fit*2;
   cam.ox = (innerWidth - IMG_W*cam.s)/2; cam.oy = (innerHeight - IMG_H*cam.s)/2;
 }
 function clampCam() {
@@ -320,7 +322,7 @@ function ajustarTela() {
 // Zoom em torno de um ponto da tela (roda do mouse e botões)
 function zoomEm(f, sx, sy) {
   const w0 = toWorld(sx, sy);
-  cam.s = clamp(cam.s * f, cam.fit, cam.fit * 6);
+  cam.s = clamp(cam.s * f, cam.fit, cam.fit * 12);
   cam.ox = sx - w0.x * cam.s; cam.oy = sy - w0.y * cam.s;
   cam.user = true; clampCam();
 }
@@ -328,7 +330,7 @@ function zoomEm(f, sx, sy) {
 function centralizar() {
   const alvo = inc ? { x:inc.x, y:inc.y } : { x:BASE.x, y:BASE.y };
   const vw = innerWidth - (painelAberto ? 350 : 0);
-  cam.s = clamp(Math.max(cam.s, cam.fit * 2), cam.fit, cam.fit * 6);
+  cam.s = clamp(Math.max(cam.s, cam.fit * 2), cam.fit, cam.fit * 12);
   cam.ox = vw/2 - alvo.x * cam.s; cam.oy = innerHeight/2 - alvo.y * cam.s;
   cam.user = true; clampCam();
 }
@@ -617,7 +619,7 @@ function desenharTrajeto() {
   trajeto.forEach((p, i) => {
     ctx.fillStyle = i === trajeto.length - 1 ? '#ef4444' : '#facc15';
     ctx.beginPath(); ctx.arc(p.x, p.y, 6*k, 0, Math.PI*2); ctx.fill();
-    ctx.fillStyle = '#111'; ctx.font = `bold ${8*k}px sans-serif`;
+    ctx.fillStyle = '#111'; ctx.font = `bold ${8*zt()}px sans-serif`;
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     ctx.fillText(String(i + 1), p.x, p.y + 0.5*k);
     ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
@@ -808,7 +810,7 @@ function desenharEscorregadeiras() {
       ctx.fillStyle = bloq ? '#ef4444' : '#fde68a';
       ctx.beginPath(); ctx.arc(e.x, e.y, 3*k, 0, Math.PI*2); ctx.fill();
     }
-    ctx.font = `bold ${9*k}px sans-serif`; ctx.fillStyle = '#fff'; ctx.strokeStyle = 'rgba(0,0,0,0.8)'; ctx.lineWidth = 3*k;
+    ctx.font = `bold ${9*zt()}px sans-serif`; ctx.fillStyle = '#fff'; ctx.strokeStyle = 'rgba(0,0,0,0.8)'; ctx.lineWidth = 3*k;
     ctx.strokeText(p.id, d.x - 4, d.y - 6); ctx.fillText(p.id, d.x - 4, d.y - 6);
   }
 }
@@ -882,7 +884,7 @@ function desenharOcorrencias() {
           ctx.beginPath(); ctx.arc(o.x + Math.cos(a)*rr, o.y + Math.sin(a)*rr, o.r*0.22, 0, Math.PI*2); ctx.fill();
         }
       }
-      ctx.font = `bold ${9*k}px sans-serif`; ctx.lineWidth = 3*k; ctx.strokeStyle = 'rgba(0,0,0,0.8)'; ctx.fillStyle = '#fff';
+      ctx.font = `bold ${9*zt()}px sans-serif`; ctx.lineWidth = 3*k; ctx.strokeStyle = 'rgba(0,0,0,0.8)'; ctx.fillStyle = '#fff';
       const rot = o.id + (o.espuma ? ' · espuma' : ' · combustível');
       ctx.strokeText(rot, o.x - o.r, o.y - o.r - 4*k); ctx.fillText(rot, o.x - o.r, o.y - o.r - 4*k);
     } else {
@@ -892,7 +894,7 @@ function desenharOcorrencias() {
         ctx.fillStyle = i % 2 ? 'rgba(255,90,0,0.75)' : 'rgba(255,170,0,0.8)';
         ctx.beginPath(); ctx.arc(o.x + Math.cos(a)*d, o.y + Math.sin(a)*d, base*(0.5 + 0.25*Math.sin(t*9 + i)), 0, Math.PI*2); ctx.fill();
       }
-      ctx.font = `bold ${9*k}px sans-serif`; ctx.lineWidth = 3*k; ctx.strokeStyle = 'rgba(0,0,0,0.8)'; ctx.fillStyle = '#fff';
+      ctx.font = `bold ${9*zt()}px sans-serif`; ctx.lineWidth = 3*k; ctx.strokeStyle = 'rgba(0,0,0,0.8)'; ctx.fillStyle = '#fff';
       const rot = o.id + ' · ' + Math.round(o.int) + '%' + (o.propaga ? ' · propagando' : '');
       ctx.strokeText(rot, o.x - o.r, o.y - o.r - 4*k); ctx.fillText(rot, o.x - o.r, o.y - o.r - 4*k);
     }
@@ -950,7 +952,7 @@ function desenharVeiculo(u) {
   const lw = k / ((sx + sy) / 2);   // espessura de linha constante na tela
   if (u.id === selId) {
     ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.5*k; ctx.setLineDash([3*k, 2*k]);
-    ctx.beginPath(); ctx.arc(u.x, u.y, 12*k, 0, Math.PI*2); ctx.stroke(); ctx.setLineDash([]);
+    ctx.beginPath(); ctx.arc(u.x, u.y, 12*zt(), 0, Math.PI*2); ctx.stroke(); ctx.setLineDash([]);
   }
   ctx.save();
   ctx.translate(u.x, u.y); ctx.rotate(u.h || 0); ctx.scale(sx, sy);
@@ -983,22 +985,22 @@ function desenharVeiculo(u) {
   // número da unidade: distintivo de tamanho fixo na tela, sobre a viatura
   const num = (u.id.match(/\d+$/) || [])[0];
   if (num) {
-    ctx.fillStyle = '#ffffff'; ctx.beginPath(); ctx.arc(u.x, u.y, 5*k, 0, Math.PI*2); ctx.fill();
-    ctx.fillStyle = '#111'; ctx.font = `bold ${7*k}px sans-serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.fillText(num, u.x, u.y + 0.5*k);
+    ctx.fillStyle = '#ffffff'; ctx.beginPath(); ctx.arc(u.x, u.y, 5*zt(), 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle = '#111'; ctx.font = `bold ${7*zt()}px sans-serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(num, u.x, u.y + 0.5*zt());
     ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
   }
   // luzes de emergência: piscam quando a unidade está em operação ou deslocamento
   if (u.acao !== 'parado' || u.dest) {
     const fase = Math.floor(performance.now() / 110) % 2;
     ctx.fillStyle = fase ? 'rgba(239,68,68,0.9)' : 'rgba(59,130,246,0.9)';
-    ctx.beginPath(); ctx.arc(u.x + 3*k, u.y - 7*k, 2.2*k, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc(u.x + 3*zt(), u.y - 7*zt(), 2.2*zt(), 0, Math.PI*2); ctx.fill();
     ctx.strokeStyle = 'rgba(0,0,0,0.6)'; ctx.lineWidth = k; ctx.stroke();
   }
   // identificação
-  ctx.font = `bold ${11*k}px sans-serif`; ctx.lineWidth = 3*k;
+  ctx.font = `bold ${11*zt()}px sans-serif`; ctx.lineWidth = 3*k;
   ctx.strokeStyle = 'rgba(0,0,0,0.8)'; ctx.fillStyle = '#fff';
-  ctx.strokeText(u.id, u.x - 10*k, u.y - 13*k); ctx.fillText(u.id, u.x - 10*k, u.y - 13*k);
+  ctx.strokeText(u.id, u.x - 10*zt(), u.y - 13*zt()); ctx.fillText(u.id, u.x - 10*zt(), u.y - 13*zt());
 }
 
 function desenhar() {
@@ -1011,7 +1013,7 @@ function desenhar() {
   else { ctx.fillStyle = '#2c3a2e'; ctx.fillRect(0, 0, IMG_W, IMG_H); }
 
   const txt = (t, x, y) => { ctx.strokeText(t, x, y); ctx.fillText(t, x, y); };
-  ctx.font = `bold ${12*k}px sans-serif`; ctx.lineWidth = 3*k; ctx.strokeStyle = 'rgba(0,0,0,0.75)'; ctx.fillStyle = '#fff';
+  ctx.font = `bold ${12*zt()}px sans-serif`; ctx.lineWidth = 3*k; ctx.strokeStyle = 'rgba(0,0,0,0.75)'; ctx.fillStyle = '#fff';
 
   // áreas
   for (const a of areas) {
@@ -1034,7 +1036,7 @@ function desenhar() {
     }
     const n = unidades.filter(u => u.area === a.id).length;
     ctx.fillStyle = '#fff'; ctx.strokeStyle = 'rgba(0,0,0,0.75)'; ctx.lineWidth = 3*k;
-    txt(a.id + ' (' + n + ')', a.x - 30, a.y - a.r - 6*k);
+    txt(a.id + ' (' + n + ')', a.x - 30*zt(), a.y - a.r - 6*zt());
   }
 
   // base SESCINC
