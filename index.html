@@ -235,9 +235,13 @@
       <label>Combustível <input id="acComb" style="width:110px" placeholder="Ex.: 6.500 kg"></label></div>
     <p id="acCat" class="peq"></p>
     <b style="font-size:12px">Portas e escorregadeiras</b>
-    <p class="peq">Posição em metros a partir do centro da aeronave (positivo = para o nariz). Inclinação: graus em relação ao lado (+ para trás, − para a frente; vazio = padrão). Comprimento da escorregadeira em metros. Saída de asa: não há escorregadeira sobre a asa.</p>
+    <canvas id="acCanvas" width="660" height="420" style="width:100%;background:#0b1220;border-radius:8px;touch-action:none;cursor:crosshair"></canvas>
+    <div class="linha"><button id="acTracar" class="sec">Traçar escorregadeira</button><button id="acConcluir" class="sec">Concluir</button>
+      <label><input type="checkbox" id="acEsp" checked> espelhar no outro lado</label>
+      <label><input type="checkbox" id="acAsa"> saída de asa</label></div>
+    <p class="peq">Clique na lateral da fuselagem para marcar a porta e depois clique onde a escorregadeira termina (cliques seguintes fazem dobras). Duplo clique ou "Concluir" finaliza. Arraste os pontos para ajustar. Em "saída de asa" o 1º trecho é só o caminho sobre a asa (tracejado) e a escorregadeira começa depois dele.</p>
     <div id="acPortas"></div>
-    <div class="linha"><button id="acAddPorta" class="sec">+ Porta</button><button id="acSalvar">Salvar aeronave</button><button id="acPadrao" class="sec">Restaurar padrões</button></div>
+    <div class="linha"><button id="acSalvar">Salvar aeronave</button><button id="acPadrao" class="sec">Restaurar padrões</button></div>
   </section>
 
   <section id="secCaso" class="so-admin">
@@ -1005,27 +1009,10 @@ function acaoRapida(pt) {
   if (acao) comandarAcao(u, acao);
 }
 // Trajeto da escorregadeira em coordenadas do mundo.
-// Portas: abrem a 90° com a fuselagem (as traseiras, 20° mais para trás). Saídas sobre a asa: sem escorregadeira na asa; as pessoas andam até a borda de fuga e escorregam pela parte de trás dela.
+// O traçado de cada escorregadeira vem da ficha da aeronave (pontos em metros, desenhados no editor das Configurações).
+// Saída de asa: o 1º trecho é só o caminho sobre a asa; a escorregadeira começa depois dele.
 function trajetoEscorregadeira(p) {
-  // metros (relativos à aeronave) -> unidades locais do desenho
-  const M = (xm, ym) => [xm / (M_POR_UL * AE.sx), ym / (M_POR_UL * AE.sy)];
-  const lenM = p.len > 0 ? p.len : 14;
-  let pts;
-  if (p.tipo === 'asa') {
-    // sai pela asa até a extremidade traseira dela e vira 80° em direção à ponta da asa
-    const rx = Math.min(-12, p.lx - 4), ang = 80 * Math.PI / 180;
-    pts = [[p.lx, p.ly], [rx, p.lado * 9], [rx - Math.cos(ang) * 40, p.lado * (9 + Math.sin(ang) * 40)]];
-  } else if (p.tipo === 'asafus') {
-    // saída de asa com escorregadeira junto à fuselagem, correndo para trás a partir da saída
-    const y0 = p.ly + M(0, p.lado * 0.9)[1];
-    pts = [[p.lx, y0], [p.lx - M(lenM, 0)[0], y0]];
-  } else {
-    // portas: 90° com a fuselagem, com inclinação opcional (+ para trás, − para a frente); sem valor, as traseiras ficam 20° para trás
-    const ang = (p.ang !== undefined && p.ang !== null ? p.ang : (p.lx < -10 ? 20 : 0)) * Math.PI / 180;
-    const v = M(-Math.sin(ang) * lenM, p.lado * Math.cos(ang) * lenM);
-    pts = [[p.lx, p.ly], [p.lx + v[0], p.ly + v[1]]];
-  }
-  return pts.map(q => aeroParaMundo(q[0], q[1]));
+  return p.pts.map(q => aeroParaMundo(q[0] / (M_POR_UL * AE.sx), q[1] / (M_POR_UL * AE.sy)));
 }
 function pontaEscorregadeira(p, t = 1) {
   const w = trajetoEscorregadeira(p);
@@ -2335,9 +2322,26 @@ function categoriaPorComp(c) {
   return 10;
 }
 // Aplica a ficha: tamanho do desenho e portas com as posições cadastradas
+// Fichas antigas (posição, lado, ângulo, comprimento) são convertidas em traçado em metros: x para o nariz, y para a direita
+function legadoParaPts(d, spec) {
+  if (Array.isArray(d.pts) && d.pts.length >= 2) return d.pts;
+  const sx = spec.comp / COMP_DESENHO_M, sy = spec.env / 40, Mx = M_POR_UL * sx, My = M_POR_UL * sy;
+  const lado = d.lado, lx = d.x / Mx, y0 = lado * 9 * My, lenM = d.len > 0 ? d.len : 14;
+  if (d.tipo === 'asa') {
+    const rx = Math.min(-12, lx - 4), a = 80 * Math.PI / 180;
+    return [[d.x, y0], [rx * Mx, y0], [(rx - Math.cos(a) * 40) * Mx, lado * (9 + Math.sin(a) * 40) * My]];
+  }
+  if (d.tipo === 'asafus') { const yy = y0 + lado * 0.9; return [[d.x, yy], [d.x - lenM, yy]]; }
+  const ang = (d.ang !== undefined && d.ang !== null ? d.ang : (lx < -10 ? 20 : 0)) * Math.PI / 180;
+  return [[d.x, y0], [d.x - Math.sin(ang) * lenM, y0 + lado * Math.cos(ang) * lenM]];
+}
 function aplicarAeronaveSpec(spec) {
   AE = { sx: spec.comp / COMP_DESENHO_M, sy: spec.env / 40, spec };
-  portas = spec.portas.map((d, i) => ({ id:'P' + (i + 1), nome:d.nome, lx: d.x / (M_POR_UL * AE.sx), ly: d.lado * 9, lado:d.lado, tipo:d.tipo, ang:d.ang, len:d.len, armada:false, prog:0 }));
+  const Mx = M_POR_UL * AE.sx, My = M_POR_UL * AE.sy;
+  portas = spec.portas.map((d, i) => {
+    const pts = legadoParaPts(d, spec);
+    return { id:'P' + (i + 1), nome:d.nome, pts, tipo: d.tipo === 'asa' ? 'asa' : 'porta', lx: pts[0][0] / Mx, ly: pts[0][1] / My, lado: pts[0][1] < 0 ? -1 : 1, armada:false, prog:0 };
+  });
   $('portasList').innerHTML = '';
 }
 const selAero = $('fAeroSel');
@@ -2367,38 +2371,121 @@ function acMontarLista(id) {
 }
 function acCarregar() {
   acEdit = clonar(AERONAVES.find(a => a.id === acSel.value) || AERONAVES[0]);
+  acEdit.portas = acEdit.portas.map(d => ({ nome:d.nome, tipo: d.tipo === 'asa' ? 'asa' : 'porta', pts: clonar(legadoParaPts(d, acEdit)) }));
   $('acNome').value = acEdit.nome; $('acComp').value = acEdit.comp; $('acEnv').value = acEdit.env;
   $('acPax').value = acEdit.pax; $('acComb').value = acEdit.comb || '';
-  acCatTxt(); acMontarPortas();
+  acTraco = null; acCatTxt(); acMontarPortas(); acDesenhar();
 }
 function acCatTxt() { $('acCat').textContent = 'Categoria contra incêndio pelo comprimento: ' + categoriaPorComp(Number($('acComp').value) || acEdit.comp) + '.'; }
 function acMontarPortas() {
   const box = $('acPortas'); box.innerHTML = '';
   acEdit.portas.forEach((d, j) => {
     const r = document.createElement('div'); r.className = 'linha';
-    r.innerHTML = '<input class="pn" style="width:92px" value="' + esc(d.nome) + '">' +
-      '<input class="px" type="number" step="0.5" style="width:62px" value="' + d.x + '"> m' +
-      '<select class="pl"><option value="-1">Esq.</option><option value="1">Dir.</option></select>' +
-      '<select class="pt"><option value="porta">Porta</option><option value="asa">Asa (vira na borda)</option><option value="asafus">Asa (junto à fuselagem)</option></select>' +
-      '<input class="pa" type="number" step="1" style="width:50px" placeholder="auto" title="Inclinação da escorregadeira em graus: + para trás, − para a frente"> °' +
-      '<input class="pc" type="number" step="0.5" min="1" style="width:50px" placeholder="14" title="Comprimento da escorregadeira em metros"> m' +
+    r.innerHTML = '<b style="width:20px">' + (j + 1) + '</b><input class="pn" style="width:110px" value="' + esc(d.nome) + '">' +
+      '<select class="pt"><option value="porta">Porta</option><option value="asa">Saída de asa</option></select>' +
       '<button class="sec pr" title="Remover">✕</button>';
     box.appendChild(r);
-    r.querySelector('.pl').value = String(d.lado); r.querySelector('.pt').value = d.tipo;
+    r.querySelector('.pt').value = d.tipo;
     r.querySelector('.pn').oninput = e => d.nome = e.target.value;
-    r.querySelector('.px').oninput = e => d.x = Number(e.target.value) || 0;
-    r.querySelector('.pl').onchange = e => d.lado = Number(e.target.value);
-    r.querySelector('.pt').onchange = e => d.tipo = e.target.value;
-    r.querySelector('.pa').value = d.ang === undefined || d.ang === null ? '' : d.ang;
-    r.querySelector('.pc').value = d.len || '';
-    r.querySelector('.pa').oninput = e => { d.ang = e.target.value === '' ? undefined : Number(e.target.value); };
-    r.querySelector('.pc').oninput = e => { d.len = e.target.value === '' ? undefined : Math.max(1, Number(e.target.value) || 1); };
-    r.querySelector('.pr').onclick = () => { if (acEdit.portas.length > 1) { acEdit.portas.splice(j, 1); acMontarPortas(); } };
+    r.querySelector('.pt').onchange = e => { d.tipo = e.target.value; acDesenhar(); };
+    r.querySelector('.pr').onclick = () => { if (acEdit.portas.length > 1) { acEdit.portas.splice(j, 1); acMontarPortas(); acDesenhar(); } };
   });
 }
+// ----- desenho da aeronave nas Configurações: o traço de cada escorregadeira é feito aqui -----
+let acTraco = null;          // linha em traçado: { pts:[[x,y]...] }
+let acHover = null, acArrasto = null;
+const acCv = $('acCanvas'), acC = acCv.getContext('2d');
+function acGeom() {
+  const comp = Number($('acComp').value) || acEdit.comp, env = Number($('acEnv').value) || acEdit.env;
+  const ppm = Math.min((acCv.width - 40) / (comp + 24), (acCv.height - 30) / (env + 8));
+  return { comp, env, ppm, cx: acCv.width / 2, cy: acCv.height / 2, sx: comp / COMP_DESENHO_M, sy: env / 40, halfW: 9 * M_POR_UL * env / 40 };
+}
+function acPx(g, q) { return [g.cx + q[0] * g.ppm, g.cy + q[1] * g.ppm]; }
+function acDesenhar() {
+  if (!acEdit) return;
+  const g = acGeom(), c = acC;
+  c.clearRect(0, 0, acCv.width, acCv.height);
+  // aeronave (mesmo desenho do mapa, nariz para a direita)
+  c.save(); c.translate(g.cx, g.cy); c.scale(g.ppm * M_POR_UL * g.sx, g.ppm * M_POR_UL * g.sy);
+  const corpo = () => { c.beginPath(); c.moveTo(62, 0); c.bezierCurveTo(62, -8, 50, -9, 40, -9); c.lineTo(-48, -8); c.lineTo(-64, -2.5); c.lineTo(-64, 2.5); c.lineTo(-48, 8); c.lineTo(40, 9); c.bezierCurveTo(50, 9, 62, 8, 62, 0); c.closePath(); };
+  const asa = k => { c.beginPath(); c.moveTo(18, 7*k); c.lineTo(-14, 62*k); c.lineTo(-27, 62*k); c.lineTo(-12, 7*k); c.closePath(); };
+  const est = k => { c.beginPath(); c.moveTo(-44, 5*k); c.lineTo(-56, 26*k); c.lineTo(-64, 26*k); c.lineTo(-58, 5*k); c.closePath(); };
+  c.fillStyle = '#cbd5e1'; c.strokeStyle = '#64748b'; c.lineWidth = 0.8;
+  [1, -1].forEach(k => { asa(k); c.fill(); c.stroke(); est(k); c.fill(); c.stroke(); });
+  c.fillStyle = '#94a3b8'; [1, -1].forEach(k => c.fillRect(-6, k > 0 ? 30 : -38, 24, 8));
+  c.fillStyle = '#f1f5f9'; corpo(); c.fill(); c.stroke();
+  c.fillStyle = '#2563eb'; c.fillRect(-44, -1, 90, 2);
+  c.restore();
+  // escala
+  c.strokeStyle = '#94a3b8'; c.lineWidth = 2; c.beginPath(); c.moveTo(14, acCv.height - 14); c.lineTo(14 + 5 * g.ppm, acCv.height - 14); c.stroke();
+  c.fillStyle = '#94a3b8'; c.font = '16px sans-serif'; c.fillText('5 m', 14 + 5 * g.ppm + 6, acCv.height - 9);
+  // escorregadeiras
+  const linha = (d, cor, ghost) => {
+    const w = d.pts.map(q => acPx(g, q));
+    c.lineCap = 'round'; c.lineJoin = 'round';
+    const ini = d.tipo === 'asa' && w.length > 2 ? 1 : 0;
+    if (ini) { c.setLineDash([6, 6]); c.strokeStyle = 'rgba(251,146,60,.9)'; c.lineWidth = 3; c.beginPath(); c.moveTo(w[0][0], w[0][1]); c.lineTo(w[1][0], w[1][1]); c.stroke(); c.setLineDash([]); }
+    c.strokeStyle = 'rgba(0,0,0,.45)'; c.lineWidth = 12; c.beginPath(); c.moveTo(w[ini][0], w[ini][1]); for (let i = ini + 1; i < w.length; i++) c.lineTo(w[i][0], w[i][1]); c.stroke();
+    c.strokeStyle = cor; c.lineWidth = 8; c.stroke();
+    w.forEach((q, i) => { c.fillStyle = i === 0 ? '#22c55e' : '#fde68a'; c.beginPath(); c.arc(q[0], q[1], ghost ? 4 : 6, 0, Math.PI * 2); c.fill(); });
+    return w;
+  };
+  acEdit.portas.forEach((d, j) => {
+    const w = linha(d, d.tipo === 'asa' ? '#f59e0b' : '#fb923c');
+    c.fillStyle = '#fff'; c.font = 'bold 16px sans-serif'; c.fillText(String(j + 1), w[0][0] - 5, w[0][1] + (d.pts[0][1] < 0 ? -12 : 22));
+  });
+  if (acTraco) {
+    const pts = acTraco.pts.slice(); if (acHover) pts.push(acHover);
+    if (pts.length >= 2) linha({ pts, tipo: $('acAsa').checked ? 'asa' : 'porta' }, '#38bdf8', true);
+    else if (pts.length === 1) { const q = acPx(g, pts[0]); c.fillStyle = '#22c55e'; c.beginPath(); c.arc(q[0], q[1], 6, 0, Math.PI * 2); c.fill(); }
+  }
+}
+function acPonto(e) {
+  const r = acCv.getBoundingClientRect(), g = acGeom();
+  const px = (e.clientX - r.left) * acCv.width / r.width, py = (e.clientY - r.top) * acCv.height / r.height;
+  return { px, py, m: [(px - g.cx) / g.ppm, (py - g.cy) / g.ppm], g };
+}
+// a porta fica sempre na lateral da fuselagem; só a posição ao longo do comprimento é livre
+function acPrender(m, g) { return [clamp(m[0], -g.comp / 2 + 2, g.comp / 2 - 2), (m[1] < 0 ? -1 : 1) * g.halfW]; }
+function acConcluirLinha() {
+  if (!acTraco || acTraco.pts.length < 2) { acTraco = null; acTracarBtn(); acDesenhar(); return; }
+  const asa = $('acAsa').checked, esp = $('acEsp').checked, n = acEdit.portas.length;
+  const base = acTraco.pts.map(q => [Math.round(q[0] * 10) / 10, Math.round(q[1] * 10) / 10]);
+  const lado = base[0][1] < 0 ? 'esq.' : 'dir.', outro = lado === 'esq.' ? 'dir.' : 'esq.';
+  acEdit.portas.push({ nome:(asa ? 'asa ' : 'porta ') + (n + 1) + ' ' + lado, tipo: asa ? 'asa' : 'porta', pts: base });
+  if (esp) acEdit.portas.push({ nome:(asa ? 'asa ' : 'porta ') + (n + 2) + ' ' + outro, tipo: asa ? 'asa' : 'porta', pts: base.map(q => [q[0], -q[1]]) });
+  acTraco = null; acHover = null; acTracarBtn(); acMontarPortas(); acDesenhar();
+}
+function acTracarBtn() { $('acTracar').className = acTraco ? 'ativo' : 'sec'; $('acTracar').textContent = acTraco ? 'Traçando… (clique no desenho)' : 'Traçar escorregadeira'; }
+$('acTracar').onclick = () => { acTraco = acTraco ? null : { pts: [] }; acTracarBtn(); acDesenhar(); };
+$('acConcluir').onclick = acConcluirLinha;
+acCv.onpointerdown = e => {
+  if (!acEdit) return;
+  const { px, py, m, g } = acPonto(e);
+  if (acTraco) {
+    acTraco.pts.push(acTraco.pts.length ? [m[0], m[1]] : acPrender(m, g));
+    acDesenhar(); return;
+  }
+  // arrastar um ponto existente
+  let melhor = null, dm = 12;
+  acEdit.portas.forEach((d, j) => d.pts.forEach((q, i) => { const a = acPx(g, q), dd = Math.hypot(a[0] - px, a[1] - py); if (dd < dm) { dm = dd; melhor = { j, i }; } }));
+  if (melhor) { acArrasto = melhor; acCv.setPointerCapture(e.pointerId); }
+};
+acCv.onpointermove = e => {
+  if (!acEdit) return;
+  const { m, g } = acPonto(e);
+  if (acArrasto) {
+    const d = acEdit.portas[acArrasto.j];
+    d.pts[acArrasto.i] = acArrasto.i === 0 ? [acPrender(m, g)[0], d.pts[0][1] < 0 ? -g.halfW : g.halfW] : [m[0], m[1]];
+    acDesenhar(); return;
+  }
+  if (acTraco && acTraco.pts.length) { acHover = [m[0], m[1]]; acDesenhar(); }
+};
+acCv.onpointerup = () => { if (acArrasto) { acArrasto.j >= 0 && (acEdit.portas[acArrasto.j].pts = acEdit.portas[acArrasto.j].pts.map(q => [Math.round(q[0] * 10) / 10, Math.round(q[1] * 10) / 10])); acArrasto = null; acDesenhar(); } };
+acCv.ondblclick = () => { if (acTraco) { acTraco.pts.pop(); acConcluirLinha(); } };   // o 2º clique do duplo clique já adicionou um ponto repetido
+['acComp', 'acEnv'].forEach(id => $(id).addEventListener('input', acDesenhar));
 acSel.onchange = acCarregar;
 $('acComp').oninput = acCatTxt;
-$('acAddPorta').onclick = () => { acEdit.portas.push({ nome:'nova porta', x:0, lado:-1, tipo:'porta' }); acMontarPortas(); };
 $('acNovo').onclick = () => {
   const n = { id:'ac' + Date.now(), nome:'Nova aeronave', comp:30, env:30, pax:100, comb:'',
     portas:[ {nome:'frente esq.',x:9,lado:-1,tipo:'porta'}, {nome:'frente dir.',x:9,lado:1,tipo:'porta'}, {nome:'traseira esq.',x:-9,lado:-1,tipo:'porta'}, {nome:'traseira dir.',x:-9,lado:1,tipo:'porta'} ] };
