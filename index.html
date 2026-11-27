@@ -798,7 +798,7 @@ function desenharAeronavePreview() {
     x = trajeto[0].x; y = trajeto[0].y;
     if (trajeto.length > 1) h = Math.atan2(trajeto[1].y - y, trajeto[1].x - x);
   }
-  ctx.globalAlpha = 0.55; desenharAviao(x, y, h); ctx.globalAlpha = 1;
+  desenharAviao(x, y, h);
 }
 function desenharTrajeto() {
   if (!trajeto.length) return;
@@ -1007,7 +1007,7 @@ function acaoRapida(pt) {
 // Ponta da escorregadeira: as traseiras abrem a 90° com a fuselagem; as dianteiras mantêm leve inclinação para a frente
 function pontaEscorregadeira(p, t = 1) {
   // sobre a asa: sai pela porta de emergência, cruza a asa e desce pela borda de fuga
-  if (p.tipo === 'asa') return aeroParaMundo(p.lx - 22 * t, p.ly + p.lado * 40 * t);
+  if (p.tipo === 'asa') return aeroParaMundo(p.lx - 42 * t, p.ly + p.lado * 30 * t);
   const avanco = p.lx < 0 ? 0 : 8;
   return aeroParaMundo(p.lx + avanco * t, p.ly + p.lado * 44 * t);
 }
@@ -1027,9 +1027,6 @@ function desenharEscorregadeiras() {
       ctx.beginPath(); ctx.arc(e.x, e.y, 5*k, 0, Math.PI*2); ctx.fill();
       ctx.lineCap = 'butt';
     }
-    if (cam.s < escalaInicial() * 2.5 && !p.armada) continue;
-    ctx.font = `bold ${7*zt()}px sans-serif`; ctx.fillStyle = '#fff'; ctx.strokeStyle = 'rgba(0,0,0,0.8)'; ctx.lineWidth = 2.5*k;
-    ctx.strokeText(p.id, d.x - 3*zt(), d.y - 3*zt()); ctx.fillText(p.id, d.x - 3*zt(), d.y - 3*zt());
   }
 }
 function desenharPessoas() {
