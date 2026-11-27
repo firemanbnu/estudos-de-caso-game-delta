@@ -1780,6 +1780,7 @@ function abrirCfg() {
   $('cfgBtn').textContent = 'Voltar';
 }
 function fecharCfg() {
+  if (typeof acCommit === 'function') acCommit(true);
   cfgAberta = false; cfgPrev = null; cfgPrevA = null;
   $('cfg').style.display = 'none';
   PAINEIS.forEach(id => $(id).style.display = '');
@@ -2386,9 +2387,10 @@ function acMontarPortas() {
       '<button class="sec pr" title="Remover">✕</button>';
     box.appendChild(r);
     r.querySelector('.pt').value = d.tipo;
-    r.querySelector('.pn').oninput = e => d.nome = e.target.value;
-    r.querySelector('.pt').onchange = e => { d.tipo = e.target.value; acDesenhar(); };
-    r.querySelector('.pr').onclick = () => { if (acEdit.portas.length > 1) { acEdit.portas.splice(j, 1); acMontarPortas(); acDesenhar(); } };
+    r.querySelector('.pn').oninput = e => { d.nome = e.target.value; };
+    r.querySelector('.pn').onchange = () => acCommit(false);
+    r.querySelector('.pt').onchange = e => { d.tipo = e.target.value; acDesenhar(); acCommit(false); };
+    r.querySelector('.pr').onclick = () => { if (acEdit.portas.length > 1) { acEdit.portas.splice(j, 1); acMontarPortas(); acDesenhar(); acCommit(false); } };
   });
 }
 // ----- desenho da aeronave nas Configurações: o traço de cada escorregadeira é feito aqui -----
@@ -2454,7 +2456,7 @@ function acConcluirLinha() {
   const lado = base[0][1] < 0 ? 'esq.' : 'dir.', outro = lado === 'esq.' ? 'dir.' : 'esq.';
   acEdit.portas.push({ nome:(asa ? 'asa ' : 'porta ') + (n + 1) + ' ' + lado, tipo: asa ? 'asa' : 'porta', pts: base });
   if (esp) acEdit.portas.push({ nome:(asa ? 'asa ' : 'porta ') + (n + 2) + ' ' + outro, tipo: asa ? 'asa' : 'porta', pts: base.map(q => [q[0], -q[1]]) });
-  acTraco = null; acHover = null; acTracarBtn(); acMontarPortas(); acDesenhar();
+  acTraco = null; acHover = null; acTracarBtn(); acMontarPortas(); acDesenhar(); acCommit(false);
 }
 function acTracarBtn() { $('acTracar').className = acTraco ? 'ativo' : 'sec'; $('acTracar').textContent = acTraco ? 'Traçando… (clique no desenho)' : 'Traçar escorregadeira'; }
 $('acTracar').onclick = () => { acTraco = acTraco ? null : { pts: [] }; acTracarBtn(); acDesenhar(); };
@@ -2481,36 +2483,45 @@ acCv.onpointermove = e => {
   }
   if (acTraco && acTraco.pts.length) { acHover = [m[0], m[1]]; acDesenhar(); }
 };
-acCv.onpointerup = () => { if (acArrasto) { acArrasto.j >= 0 && (acEdit.portas[acArrasto.j].pts = acEdit.portas[acArrasto.j].pts.map(q => [Math.round(q[0] * 10) / 10, Math.round(q[1] * 10) / 10])); acArrasto = null; acDesenhar(); } };
+acCv.onpointerup = () => { if (acArrasto) { acArrasto.j >= 0 && (acEdit.portas[acArrasto.j].pts = acEdit.portas[acArrasto.j].pts.map(q => [Math.round(q[0] * 10) / 10, Math.round(q[1] * 10) / 10])); acArrasto = null; acDesenhar(); acCommit(false); } };
 acCv.ondblclick = () => { if (acTraco) { acTraco.pts.pop(); acConcluirLinha(); } };   // o 2º clique do duplo clique já adicionou um ponto repetido
 ['acComp', 'acEnv'].forEach(id => $(id).addEventListener('input', acDesenhar));
-acSel.onchange = acCarregar;
+acSel.onchange = () => { acCommit(false); acCarregar(); };
 $('acComp').oninput = acCatTxt;
 $('acNovo').onclick = () => {
   const n = { id:'ac' + Date.now(), nome:'Nova aeronave', comp:30, env:30, pax:100, comb:'',
     portas:[ {nome:'frente esq.',x:9,lado:-1,tipo:'porta'}, {nome:'frente dir.',x:9,lado:1,tipo:'porta'}, {nome:'traseira esq.',x:-9,lado:-1,tipo:'porta'}, {nome:'traseira dir.',x:-9,lado:1,tipo:'porta'} ] };
-  AERONAVES.push(n); salvarAeronaves(); montarSelAero(true); acMontarLista(n.id);
+  acCommit(false); AERONAVES.push(n); salvarAeronaves(); montarSelAero(true); acMontarLista(n.id);
 };
 $('acDel').onclick = () => {
   if (AERONAVES.length <= 1) { $('msg').textContent = 'Mantenha pelo menos uma aeronave cadastrada.'; return; }
   AERONAVES = AERONAVES.filter(a => a.id !== acSel.value);
   salvarAeronaves(); montarSelAero(true); escolherAeronave(false); acMontarLista();
 };
-$('acSalvar').onclick = () => {
+// Grava na lista (e no navegador) o que está sendo editado e já aplica à aeronave escolhida no caso.
+// É chamado a cada alteração: não é preciso lembrar de salvar para a partida refletir as mudanças.
+function acCommit(preencher) {
+  if (!acEdit) return;
   acEdit.nome = $('acNome').value.trim() || 'Aeronave sem nome';
   acEdit.comp = clamp(Number($('acComp').value) || 30, 5, 90);
   acEdit.env = clamp(Number($('acEnv').value) || 30, 5, 90);
   acEdit.pax = clamp(Math.round(Number($('acPax').value) || 0), 0, 900);
   acEdit.comb = $('acComb').value.trim();
   const i = AERONAVES.findIndex(a => a.id === acEdit.id);
-  if (i >= 0) AERONAVES[i] = clonar(acEdit);
+  if (i < 0) return;
+  AERONAVES[i] = clonar(acEdit);
   salvarAeronaves();
   const atual = AE.spec && AE.spec.id;
   montarSelAero(true);
-  if (atual === acEdit.id) escolherAeronave(true);
+  if (atual === acEdit.id) { if (preencher) escolherAeronave(true); else { aplicarAeronaveSpec(AERONAVES[i]); selCat.value = String(categoriaPorComp(AERONAVES[i].comp)); } }
+  const o = [...acSel.options].find(x => x.value === acEdit.id); if (o) o.textContent = acEdit.nome;
+}
+$('acSalvar').onclick = () => {
+  acCommit(true);
   acMontarLista(acEdit.id);
   $('msg').textContent = 'Aeronave "' + acEdit.nome + '" salva.';
 };
+['acNome', 'acComp', 'acEnv', 'acPax', 'acComb'].forEach(id => $(id).addEventListener('change', () => acCommit(true)));
 $('acPadrao').onclick = () => {
   AERONAVES = clonar(AERONAVES_PADRAO); salvarAeronaves();
   montarSelAero(false); escolherAeronave(true); acMontarLista();
