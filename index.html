@@ -1,0 +1,1422 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SESCINC - Estudo de Caso ARFF (protótipo)</title>
+<style>
+  * { box-sizing:border-box; }
+  html, body { margin:0; height:100%; overflow:hidden; background:#0f172a; font-family:system-ui,sans-serif; color:#e8edf3; }
+  canvas { position:fixed; left:0; top:0; display:block; cursor:default; }
+  #hud { position:fixed; left:8px; top:8px; right:8px; display:flex; gap:12px; align-items:center; flex-wrap:wrap; background:rgba(15,23,42,0.85); padding:6px 10px; border-radius:8px; font-size:13px; z-index:2; }
+  #painel { position:fixed; right:8px; top:72px; bottom:8px; width:340px; overflow-y:auto; background:rgba(20,28,40,0.94); border-radius:10px; padding:10px; font-size:13px; z-index:2; }
+  body.sem-painel #painel { display:none; }
+  section { border-bottom:1px solid #3a4a63; padding-bottom:8px; margin-bottom:8px; }
+  h2 { font-size:15px; margin:0 0 6px; }
+  button { background:#3b82f6; color:#fff; border:0; border-radius:5px; padding:5px 9px; cursor:pointer; margin:2px 0; font:inherit; }
+  button:disabled { background:#4b5563; cursor:default; }
+  button.sec { background:#4b5563; }
+  button.ativo { background:#f59e0b; color:#111; }
+  input, select, textarea { padding:4px; border-radius:4px; border:1px solid #3a4a63; background:#111827; color:#e8edf3; font:inherit; }
+  input[type=number] { width:90px; }
+  .linha { display:flex; gap:6px; align-items:center; flex-wrap:wrap; margin:6px 0; }
+  .bar { height:8px; background:#111; border-radius:4px; overflow:hidden; margin:4px 0; }
+  .bar > div { height:100%; background:#22c55e; width:100%; }
+  .stat b { color:#fff; }
+  .row { padding:5px 6px; border-radius:5px; cursor:pointer; border:1px solid transparent; font-size:12px; }
+  .row:hover { background:#1f2a3d; }
+  .row.sel { border-color:#fff; }
+  .row i { color:#9ca3af; font-style:normal; }
+  #msg { white-space:pre-line; min-height:30px; color:#fbbf24; font-size:12px; line-height:1.4; }
+  #nota { font-size:11px; color:#9ca3af; }
+  .peq { font-size:12px; color:#9ca3af; margin:4px 0; }
+  #cfg { display:none; }
+
+  /* Barra de comando sobre o mapa */
+  #barra { position:fixed; left:60px; right:356px; bottom:8px; background:rgba(15,23,42,0.94); padding:8px 10px; border-radius:10px; z-index:2; font-size:13px; display:flex; flex-direction:column; gap:2px; }
+  body.sem-painel #barra { right:8px; }
+  #barra .linha { margin:2px 0; gap:5px; }
+  #barra .rot { color:#9ca3af; font-size:11px; width:58px; text-transform:uppercase; letter-spacing:.04em; }
+  #barra button { font-size:12px; padding:5px 8px; }
+  #barra select { font-size:12px; }
+  #barraNome { font-weight:600; min-width:200px; }
+  #barraDica { font-size:11px; color:#9ca3af; }
+  #placeTxt { color:#fbbf24; }
+
+  /* Controles de mapa */
+  #zoom { position:fixed; left:8px; top:84px; display:flex; flex-direction:column; gap:4px; z-index:2; }
+  #zoom button { width:44px; padding:6px 0; text-align:center; font-size:13px; }
+
+  /* Papéis: o atendente não vê as opções de criação do cenário */
+  body[data-papel="atendente"] .so-admin { display:none !important; }
+  body[data-papel="apresentador"] .so-atendente { display:none !important; }
+</style>
+</head>
+<body>
+<div id="entrada" style="position:fixed;inset:0;background:rgba(15,23,42,0.92);z-index:10;display:flex;align-items:center;justify-content:center;">
+  <div style="background:#1e293b;padding:20px;border-radius:12px;width:400px;">
+    <h2 style="font-size:17px;margin:0 0 8px">Modo de uso</h2>
+    <p class="peq">Criar sala: você é o apresentador. Gera um código para o atendente entrar e comanda o cenário.<br>Entrar como atendente: digite o código recebido. Você comanda viaturas, áreas e ações no seu computador.<br>Modo local: tudo no seu computador, sem sincronização.</p>
+    <div class="linha"><button id="modoAp">Criar sala (apresentador)</button></div>
+    <div class="linha"><input id="codEntrada" placeholder="Código da sala" maxlength="6" style="width:150px;text-transform:uppercase"><button id="modoAt" class="sec">Entrar como atendente</button></div>
+    <div class="linha"><button id="modoLocal" class="sec">Modo local (sem sala)</button></div>
+    <p class="peq" id="entradaMsg"></p>
+  </div>
+</div>
+<canvas id="c"></canvas>
+
+<div id="hud">
+  <span class="stat">Tempo <b id="time">00:00</b></span>
+  <span class="stat">Fogo <b id="fogo">--</b></span>
+  <span class="stat">Fumaça <b id="fumaca">--</b></span>
+  <span class="stat">A bordo <b id="pax">--</b></span>
+  <span class="stat">Feridos <b id="feridos">--</b></span>
+  <span class="stat">Resgatados <b id="resg">--</b></span>
+  <span class="stat">Atendidos <b id="aten">--</b></span>
+  <span class="stat">Evacuados <b id="evac">--</b></span>
+  <span class="stat">Sala <b id="codSala">--</b></span>
+  <button id="copiarSala" class="sec so-admin" style="display:none">Copiar link da sala</button>
+  <button id="pause" class="sec so-admin">Pausar</button>
+  <label class="so-admin">Velocidade <select id="vel"><option value="1">1x</option><option value="2">2x</option><option value="4">4x</option></select></label>
+  <button id="cfgBtn" class="sec so-admin">Configurações</button>
+  <button id="painelBtn" class="sec">Ocultar painel</button>
+</div>
+
+<div id="zoom">
+  <button id="zIn" title="Aproximar (tecla +)">+</button>
+  <button id="zOut" class="sec" title="Afastar (tecla -)">−</button>
+  <button id="zFit" class="sec" title="Ver o mapa inteiro (tecla F)">Tela</button>
+  <button id="zCentro" class="sec" title="Centralizar na aeronave, ou na base se não houver caso (tecla C)">Centro</button>
+</div>
+
+<div id="barra">
+  <div class="linha">
+    <span class="rot">Adicionar</span>
+    <button data-add="AB" title="Viatura de combate (tanque maior)">CCI</button>
+    <button data-add="AP" title="Viatura de combate (tanque menor)">CCI</button>
+    <button data-add="UR">CRS</button>
+    <button data-add="AMB">AMBULÂNCIA</button>
+    <button data-add="CMD">PCM</button>
+    <button data-add="AT" class="sec">Área AT</button>
+    <button data-add="CC" class="sec">Área CC</button>
+    <button data-add="RE" class="sec">Área RE</button>
+  </div>
+  <div class="linha" id="barraCmd">
+    <span class="rot">Comando</span>
+    <span id="barraNome"></span>
+    <button data-acao="combate">Combater incêndio</button>
+    <button data-acao="resgate">Resgatar passageiros</button>
+    <button data-acao="atendimento">Atendimento médico</button>
+    <button data-acao="parado" class="sec">Parar</button>
+    <button data-acao="base" class="sec">Retornar à base</button>
+    <select id="barraArea" style="display:none"></select>
+    <button id="barraEnviar" class="sec" style="display:none">Enviar à área</button>
+    <button id="barraSair" class="sec" style="display:none">Sair da área</button>
+    <button id="barraRem" class="sec" style="display:none">Remover</button>
+  </div>
+  <div id="barraDica" class="linha">Clique em uma viatura ou área para comandá-la · arraste o mapa com o botão esquerdo · roda do mouse para zoom</div>
+  <div id="placeTxt" class="peq"></div>
+</div>
+
+<div id="painel">
+  <section id="cfg">
+    <h2>Configurações</h2>
+    <p class="peq">Localização do SESCINC em pixels da imagem original (1865 × 621). Clique no mapa para marcar, ou digite os valores.</p>
+    <div class="linha">X: <input id="bx" type="number" min="0" max="1865" step="1"> Y: <input id="by" type="number" min="0" max="621" step="1"></div>
+    <div class="linha">
+      <button id="cfgSalvar">Salvar</button>
+      <button id="cfgPadrao" class="sec">Restaurar padrão</button>
+      <button id="cfgCancelar" class="sec">Cancelar</button>
+    </div>
+  </section>
+
+  <section id="secCaso" class="so-admin">
+    <h2>Caso</h2>
+    <div class="linha" style="width:100%"><label style="width:100%">Tipo de emergência<br><select id="tipo" style="width:100%"></select></label></div>
+    <div class="linha" style="width:100%"><label style="width:100%">Descrição do caso<br><textarea id="desc" rows="3" style="width:100%" placeholder="Ex.: pane hidráulica no pouso, trem não recolhe, 120 pessoas a bordo"></textarea></label></div>
+    <div class="linha"><label>Categoria <select id="cat"></select></label></div>
+    <p class="peq">Ficha da aeronave: só é revelada ao atendente quando ele pedir à TWR.</p>
+    <div class="linha" style="width:100%"><label style="width:100%">Companhia aérea<br><input id="fCia" placeholder="Ex.: Companhia exemplo" style="width:100%"></label></div>
+    <div class="linha" style="width:100%"><label style="width:100%">Tipo de aeronave<br><input id="fAero" placeholder="Ex.: Boeing 737-800" style="width:100%"></label></div>
+    <div class="linha"><label>Passageiros a bordo <input id="fPax" type="number" min="0" placeholder="padrão do caso"></label></div>
+    <div class="linha" style="width:100%"><label style="width:100%">Combustível a bordo<br><input id="fComb" placeholder="Ex.: 6.500 kg" style="width:100%"></label></div>
+    <div class="linha"><button id="start">Iniciar cenário</button><button id="end" class="sec">Encerrar caso</button></div>
+  </section>
+
+  <section id="secTwrAdm" class="so-admin">
+    <h2>Pedidos da TWR</h2>
+    <div id="twrPedidosList" class="peq">Nenhum pedido pendente.</div>
+  </section>
+
+  <section id="secPortas" class="so-admin">
+    <h2>Portas e escorregadeiras</h2>
+    <div id="portasList"></div>
+    <p class="peq">Escorregadeira armada aparece no mapa. Passageiros só descem com a aeronave parada. Fogo perto da porta a bloqueia (em vermelho).</p>
+  </section>
+
+  <section id="secPath" class="so-admin">
+    <h2>Trajetória da aeronave</h2>
+    <div class="linha">
+      <button id="pathBtn" class="sec">Traçar trajetória</button>
+      <button id="pathUndo" class="sec">Desfazer ponto</button>
+      <button id="pathClear" class="sec">Limpar</button>
+    </div>
+    <p class="peq" id="pathInfo">Sem trajetória: a aeronave fica parada em um ponto da pista.</p>
+  </section>
+
+  <section id="secTwr" class="so-atendente">
+    <h2>TWR (controle)</h2>
+    <p class="peq">Solicite informações ao controle. O administrador responde com os dados do caso.</p>
+    <div class="linha">
+      <button data-pedido="pax" class="sec">Passageiros</button>
+      <button data-pedido="comb" class="sec">Combustível</button>
+      <button data-pedido="pane" class="sec">Pane / emergência</button>
+      <button data-pedido="cia" class="sec">Companhia</button>
+      <button data-pedido="aero" class="sec">Tipo de aeronave</button>
+    </div>
+    <div id="twrRespostas" class="peq">Nenhuma resposta da TWR ainda.</div>
+  </section>
+
+  <section id="secUni">
+    <h2>Viaturas e áreas</h2>
+    <div id="roster"></div>
+  </section>
+
+  <section id="secSel">
+    <h2>Seleção</h2>
+    <div id="selInfo" class="peq">Nenhuma seleção. Clique em uma viatura ou área no mapa.</div>
+  </section>
+
+  <div id="msg">Escolha o tipo de emergência, descreva o caso e clique em "Iniciar cenário". Você pode posicionar unidades e áreas antes.</div>
+  <p id="nota">Categorias, tempos, autonomias e taxas são ilustrativos. Validar com o RBAC 153 e os dados reais do aeroporto antes de usar como referência.</p>
+</div>
+
+<script>
+// ---------- Parâmetros ILUSTRATIVOS (validar com RBAC 153) ----------
+const CATEGORIAS = {
+  1:{minVcis:1}, 2:{minVcis:1}, 3:{minVcis:2}, 4:{minVcis:2}, 5:{minVcis:3},
+  6:{minVcis:3}, 7:{minVcis:3}, 8:{minVcis:4}, 9:{minVcis:4}, 10:{minVcis:5}
+};
+const TIPOS = {
+  AB:  { nome:'CCI', ab:'CCI', cor:'#facc15', cab:'#ca8a04', tanque:40, taxa:12, vel:220, acoes:['parado','combate'] },
+  AP:  { nome:'CCI', ab:'CCI', cor:'#fde047', cab:'#ca8a04', tanque:25, taxa:6,  vel:280, acoes:['parado','combate'] },
+  UR:  { nome:'CRS', ab:'CRS', cor:'#facc15', cab:'#ca8a04', vel:240, acoes:['parado','resgate'] },
+  AMB: { nome:'AMBULÂNCIA', ab:'AMBULÂNCIA', cor:'#f8fafc', cab:'#cbd5e1', vel:260, acoes:['parado','atendimento'] },
+  CMD: { nome:'PCM', ab:'PCM', cor:'#7e22ce', cab:'#581c87', vel:300, acoes:['parado'] }
+};
+const AREAS = {
+  AT: { nome:'Área de atendimento médico', sigla:'AT', cor:'#22c55e' },
+  CC: { nome:'Concentração de viaturas',   sigla:'CC', cor:'#60a5fa' },
+  RE: { nome:'Área de reabastecimento',    sigla:'RE', cor:'#f59e0b' }
+};
+const AREA_R = 45;
+const RANGE = 100;      // alcance de atuação em relação à aeronave (unidades do mapa)
+const ACAO_ROTULO = {
+  parado:'Parado', combate:'Combater incêndio', resgate:'Resgatar passageiros',
+  atendimento:'Atendimento médico', base:'Indo reabastecer', reab:'Reabastecendo'
+};
+const CASOS = {
+  pane:        { nome:'Pane hidráulica no pouso',           fogo:0,  fumaca:0,  pax:60,  taxaFogo:0,   taxaFumaca:0   },
+  motor:       { nome:'Incêndio em motor',                  fogo:40, fumaca:30, pax:80,  taxaFogo:2,   taxaFumaca:1.5 },
+  combustivel: { nome:'Vazamento de combustível',           fogo:20, fumaca:10, pax:120, taxaFogo:3,   taxaFumaca:1   },
+  trem:        { nome:'Falha no trem de pouso com faíscas', fogo:15, fumaca:5,  pax:150, taxaFogo:1.5, taxaFumaca:0.5 },
+  fumaca:      { nome:'Fumaça na cabine',                   fogo:0,  fumaca:40, pax:100, taxaFogo:0.5, taxaFumaca:2   }
+};
+
+// ---------- Mapa (unidades do mapa = pixels da imagem original 1865 × 621) ----------
+const IMG_W = 1865, IMG_H = 621;
+const ZONA = { x1:350, x2:1450, y1:335, y2:365 };
+const BASE_PADRAO = { x:830, y:455 };
+const IMG = new Image();
+IMG.src = 'navegantes-satelite.png';
+const BASE = { x:BASE_PADRAO.x, y:BASE_PADRAO.y };
+
+// ---------- Utilidades ----------
+const $ = id => document.getElementById(id);
+const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
+const DIST = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
+const mmss = t => String(Math.floor(t/60)).padStart(2,'0') + ':' + String(Math.floor(t%60)).padStart(2,'0');
+
+function carregarBase() {
+  try {
+    const s = JSON.parse(localStorage.getItem('sescinc-base'));
+    if (s && typeof s.x === 'number' && typeof s.y === 'number') return { x:clamp(s.x,0,IMG_W), y:clamp(s.y,0,IMG_H) };
+  } catch (e) {}
+  return null;
+}
+function salvarBase(b) { try { localStorage.setItem('sescinc-base', JSON.stringify(b)); } catch (e) {} }
+function aplicarBase(b) { BASE.x = b.x; BASE.y = b.y; }
+aplicarBase(carregarBase() || BASE_PADRAO);
+
+// ---------- Câmera (zoom, pan e centralização) ----------
+const cv = $('c'), ctx = cv.getContext('2d');
+const cam = { s:1, ox:0, oy:0, fit:1, user:false };
+function toWorld(sx, sy) { return { x:(sx - cam.ox)/cam.s, y:(sy - cam.oy)/cam.s }; }
+function resetCam() {
+  cam.user = false; cam.s = cam.fit;
+  cam.ox = (innerWidth - IMG_W*cam.s)/2; cam.oy = (innerHeight - IMG_H*cam.s)/2;
+}
+function clampCam() {
+  const iw = IMG_W*cam.s, ih = IMG_H*cam.s;
+  cam.ox = iw <= innerWidth ? (innerWidth - iw)/2 : clamp(cam.ox, innerWidth - iw, 0);
+  cam.oy = ih <= innerHeight ? (innerHeight - ih)/2 : clamp(cam.oy, innerHeight - ih, 0);
+}
+function ajustarTela() {
+  cv.width = innerWidth; cv.height = innerHeight;
+  cam.fit = Math.min(innerWidth/IMG_W, innerHeight/IMG_H);
+  if (cam.user) { cam.s = Math.max(cam.s, cam.fit); clampCam(); } else resetCam();
+}
+// Zoom em torno de um ponto da tela (roda do mouse e botões)
+function zoomEm(f, sx, sy) {
+  const w0 = toWorld(sx, sy);
+  cam.s = clamp(cam.s * f, cam.fit, cam.fit * 6);
+  cam.ox = sx - w0.x * cam.s; cam.oy = sy - w0.y * cam.s;
+  cam.user = true; clampCam();
+}
+// Centraliza a aeronave (ou a base, sem caso) na área visível, descontando o painel
+function centralizar() {
+  const alvo = inc ? { x:inc.x, y:inc.y } : { x:BASE.x, y:BASE.y };
+  const vw = innerWidth - (painelAberto ? 350 : 0);
+  cam.s = clamp(Math.max(cam.s, cam.fit * 2), cam.fit, cam.fit * 6);
+  cam.ox = vw/2 - alvo.x * cam.s; cam.oy = innerHeight/2 - alvo.y * cam.s;
+  cam.user = true; clampCam();
+}
+window.addEventListener('resize', ajustarTela);
+ajustarTela();
+
+// ---------- Estado ----------
+let estado = 'preparo';          // preparo | andamento | encerrado
+let pausado = false, tempo = 0, caso = null, desc = '', inc = null;
+let unidades = [], areas = [];
+let selId = null, selAreaId = null, placing = null, drag = null, panning = null;
+let usou = new Set();
+let cfgAberta = false, cfgPrev = null;
+let painelAberto = true;
+let trajeto = [], modoTrajeto = false;
+// portas da aeronave (coordenadas locais: x para frente, y para a lateral)
+let portas = [
+  { id:'P1', nome:'frente esq.',   lx:30,  ly:-9, lado:-1, armada:false, prog:0 },
+  { id:'P2', nome:'frente dir.',   lx:30,  ly:9,  lado:1,  armada:false, prog:0 },
+  { id:'P3', nome:'traseira esq.', lx:-30, ly:-9, lado:-1, armada:false, prog:0 },
+  { id:'P4', nome:'traseira dir.', lx:-30, ly:9,  lado:1,  armada:false, prog:0 }
+];
+let pessoas = [];   // passageiros descendo pelas escorregadeiras
+let rosterKey = '', selKey = '', barraKey = '';
+let twrPedidos = [];   // pedidos recebidos da TWR (apenas o administrador responde)
+let twrRespostas = []; // respostas já liberadas ao atendente (enviadas no estado)
+let twrKey = '', twrRespKey = '';
+
+const selCat = $('cat'), selTipo = $('tipo');
+for (const k in CATEGORIAS) { const o = document.createElement('option'); o.value = k; o.textContent = 'Categoria ' + k; selCat.appendChild(o); }
+selCat.value = '3';
+for (const k in CASOS) { const o = document.createElement('option'); o.value = k; o.textContent = CASOS[k].nome; selTipo.appendChild(o); }
+
+// ---------- Unidades e áreas ----------
+function criarUnidade(tipo, x, y) {
+  const t = TIPOS[tipo];
+  // CCI sempre numerada (CCI 1, CCI 2...); demais recebem número só a partir da segunda unidade do tipo
+  const numerada = tipo === 'AB' || tipo === 'AP';
+  let k = 1, id;
+  do { id = (numerada || k > 1) ? t.ab + ' ' + k : t.ab; k++; } while (unidadePorId(id));
+  return { id, tipo, x, y, h:0, dest:null, acao:'parado', area:null, tanque: t.tanque || 0, reab:0, prog:0 };
+}
+function criarArea(tipo, x, y) {
+  const n = areas.filter(a => a.tipo === tipo).length + 1;
+  return { id: AREAS[tipo].sigla + '-' + n, tipo, x, y, r: AREA_R };
+}
+const areaPorId = id => areas.find(a => a.id === id) || null;
+const unidadePorId = id => unidades.find(u => u.id === id) || null;
+function unidadeEm(p) {
+  for (let i = unidades.length - 1; i >= 0; i--) if (DIST(unidades[i], p) <= 22) return unidades[i];
+  return null;
+}
+function areaEm(p) { return areas.find(a => DIST(a, p) <= a.r) || null; }
+function naAreaAT(u) {
+  const a = areaPorId(u.area);
+  return !!a && a.tipo === 'AT' && DIST(u, a) <= a.r;
+}
+function mover(u, tx, ty, dt) {
+  const dx = tx - u.x, dy = ty - u.y, d = Math.hypot(dx, dy), passo = TIPOS[u.tipo].vel * dt;
+  if (d > 0) u.h = Math.atan2(dy, dx);
+  if (d <= passo) { u.x = tx; u.y = ty; return true; }
+  u.x += dx/d*passo; u.y += dy/d*passo;
+  return false;
+}
+function enviarArea(u, a) {
+  const outras = unidades.filter(x => x.area === a.id && x !== u).length;
+  const ang = outras * 1.1, raio = a.r * 0.5;
+  u.area = a.id;
+  u.dest = { x: a.x + Math.cos(ang)*raio, y: a.y + Math.sin(ang)*raio };
+  if (a.tipo === 'RE' && TIPOS[u.tipo].tanque) u.acao = 'base';
+  else if (u.acao === 'base') u.acao = 'parado';
+  u.prog = 0;
+}
+function statusDe(u) {
+  const a = areaPorId(u.area);
+  if (u.dest) return u.acao === 'base' ? 'Indo reabastecer' : (a ? 'Indo para ' + a.id : 'Em deslocamento');
+  if (u.acao === 'reab') return 'Reabastecendo';
+  if (u.acao === 'parado') return a ? 'Na área ' + a.id : 'Parado';
+  if (!inc || estado !== 'andamento') return a ? 'Na área ' + a.id : 'Aguardando início do caso';
+  if (u.acao === 'atendimento' && naAreaAT(u)) return 'Atuando: atendimento na área ' + a.id;
+  if (DIST(u, inc) > RANGE) return 'Aguardando posicionamento na aeronave';
+  return 'Atuando: ' + ACAO_ROTULO[u.acao];
+}
+function selecionarUnidade(id) { selId = id; selAreaId = null; }
+function selecionarArea(id) { selAreaId = id; selId = null; }
+
+// ---------- Caso ----------
+function iniciarCaso() {
+  caso = CASOS[selTipo.value];
+  desc = $('desc').value.trim();
+  let x, y;
+  if (trajeto.length) { x = trajeto[0].x; y = trajeto[0].y; }
+  else { x = ZONA.x1 + Math.random()*(ZONA.x2 - ZONA.x1); y = ZONA.y1 + Math.random()*(ZONA.y2 - ZONA.y1); }
+  const h0 = trajeto.length > 1 ? Math.atan2(trajeto[1].y - y, trajeto[1].x - x) : 0;
+  inc = { x, y, h:h0, pi:1, movendo: trajeto.length > 1, parou:false, fogo:caso.fogo, fumaca:caso.fumaca, pax:fichaCaso().pax, paxInicial:fichaCaso().pax, feridos:0, resgatados:0, atendidos:0, evacuados:0, dangerT:0 };
+  modoTrajeto = false;
+  inc.focos = localizarFocos(desc, selTipo.value);
+  pessoas = [];
+  tempo = 0; usou = new Set();
+  // As viaturas mantêm a posição e a ação que o atendente preparou antes do início
+  unidades.forEach(u => { u.tanque = TIPOS[u.tipo].tanque || 0; u.prog = 0; u.reab = 0; });
+  estado = 'andamento'; pausado = false;
+  const nomesFoco = inc.focos.map(f => f.nome).join(', ');
+  $('msg').textContent = 'Caso iniciado: ' + caso.nome + '.' + (nomesFoco ? ' Fogo localizado em: ' + nomesFoco + '.' : ' Sem fogo localizado.') + ' Posicione e comande as unidades.';
+}
+function encerrarCaso() {
+  const cat = CATEGORIAS[selCat.value];
+  const combatentes = unidades.filter(u => usou.has(u.id) && (u.tipo === 'AB' || u.tipo === 'AP')).length;
+  $('msg').textContent = [
+    'RELATÓRIO DO CASO',
+    'Caso: ' + caso.nome,
+    'Descrição: ' + (desc || '—'),
+    'Tempo decorrido: ' + mmss(tempo),
+    'Fogo final: ' + Math.round(inc.fogo) + '% | Fumaça final: ' + Math.round(inc.fumaca) + '%',
+    'Focos de fogo: ' + (inc.focos.map(f => f.nome).join(', ') || 'nenhum'),
+    'Passageiros: ' + inc.paxInicial + ' a bordo no início; ' + inc.evacuados + ' evacuados por escorregadeira, ' + inc.resgatados + ' resgatados, ' + inc.atendidos + ' atendidos, ' + inc.feridos + ' feridos.',
+    'Viaturas de combate empregadas: ' + combatentes + ' (mínimo ilustrativo para a categoria ' + selCat.value + ': ' + cat.minVcis + ') — ' + (combatentes >= cat.minVcis ? 'conforme' : 'não conforme'),
+    'Áreas montadas: ' + areas.length + ' | Unidades empregadas: ' + ([...usou].join(', ') || 'nenhuma')
+  ].join('\n');
+  estado = 'encerrado';
+}
+
+// ---------- Simulação ----------
+// A aeronave percorre a trajetória traçada, desacelera no fim e para no último ponto.
+function moverAeronave(dt) {
+  if (inc.pi >= trajeto.length) { inc.movendo = false; return; }
+  let rem = 0, px = inc.x, py = inc.y;
+  for (let i = inc.pi; i < trajeto.length; i++) {
+    rem += Math.hypot(trajeto[i].x - px, trajeto[i].y - py);
+    px = trajeto[i].x; py = trajeto[i].y;
+  }
+  let passo = Math.min(170, rem * 0.9 + 10) * dt;
+  while (passo > 0 && inc.pi < trajeto.length) {
+    const alvo = trajeto[inc.pi];
+    const d = Math.hypot(alvo.x - inc.x, alvo.y - inc.y);
+    if (d > 0) inc.h = Math.atan2(alvo.y - inc.y, alvo.x - inc.x);
+    if (d <= passo) { inc.x = alvo.x; inc.y = alvo.y; passo -= d; inc.pi++; }
+    else { inc.x += (alvo.x - inc.x)/d*passo; inc.y += (alvo.y - inc.y)/d*passo; passo = 0; }
+  }
+  if (inc.pi >= trajeto.length) {
+    inc.movendo = false;
+    if (!inc.parou) { inc.parou = true; $('msg').textContent = 'Aeronave parou. O incêndio e a cabine seguem na posição final.'; }
+  }
+}
+function tick(dt) {
+  if (pausado) return;
+  pessoas.forEach(q => { q.t += dt / 3; });
+  pessoas = pessoas.filter(q => q.t < 1);
+  const ativo = estado === 'andamento' && inc;
+  if (ativo) tempo += dt;
+  let combate = false;
+  if (ativo && inc.movendo) moverAeronave(dt);
+  // evacuação: só com a aeronave parada e porta armada e livre de fogo
+  if (ativo && !inc.movendo) {
+    portas.forEach((p, i) => {
+      if (!p.armada || inc.pax <= 0 || portaBloqueada(p)) { p.prog = 0; return; }
+      p.prog += dt;
+      if (p.prog >= 2) { p.prog = 0; inc.pax--; inc.evacuados++; pessoas.push({ porta:i, t:0 }); }
+    });
+  }
+
+  for (const u of unidades) {
+    if (u.dest) {
+      if (mover(u, u.dest.x, u.dest.y, dt)) {
+        u.dest = null;
+        if (u.acao === 'base') {
+          if (TIPOS[u.tipo].tanque) { u.acao = 'reab'; u.reab = 8; } else u.acao = 'parado';
+        }
+      }
+      continue;
+    }
+    if (u.acao === 'reab') {
+      u.reab -= dt;
+      if (u.reab <= 0) { u.acao = 'parado'; u.tanque = TIPOS[u.tipo].tanque || 0; }
+      continue;
+    }
+    if (!ativo) continue;
+    const emCena = DIST(u, inc) <= RANGE;
+
+    if (u.acao === 'combate' && emCena && inc.fogo > 0 && u.tanque > 0) {
+      inc.fogo -= TIPOS[u.tipo].taxa * dt;
+      inc.fumaca -= 3 * dt;
+      u.tanque -= dt;
+      usou.add(u.id); combate = true;
+      if (u.tanque <= 0) { u.tanque = 0; u.acao = 'parado'; $('msg').textContent = u.id + ' sem agente. Envie para reabastecer.'; }
+    } else if (u.acao === 'resgate' && emCena && inc.pax > 0) {
+      u.prog += dt; usou.add(u.id);
+      if (u.prog >= 6) { u.prog = 0; inc.pax--; inc.resgatados++; }
+    } else if (u.acao === 'atendimento' && inc.resgatados > 0 && (emCena || naAreaAT(u))) {
+      u.prog += dt; usou.add(u.id);
+      if (u.prog >= 5) { u.prog = 0; inc.resgatados--; inc.atendidos++; }
+    } else {
+      u.prog = 0;
+    }
+  }
+
+  if (ativo) {
+    if (!combate) inc.fogo += caso.taxaFogo * dt;
+    inc.fumaca += caso.taxaFumaca * dt;
+    if (inc.fogo <= 0) inc.fumaca -= 2 * dt;
+    inc.fogo = clamp(inc.fogo, 0, 100);
+    inc.fumaca = clamp(inc.fumaca, 0, 100);
+    if (inc.fogo > 50 || inc.fumaca > 60) inc.dangerT += dt; else inc.dangerT = 0;
+    if (inc.dangerT >= 10 && inc.pax > 0) {
+      inc.dangerT = 0; inc.pax--; inc.feridos++;
+      $('msg').textContent = 'Passageiro ferido na cabine por exposição ao fogo/fumaça.';
+    }
+  }
+}
+
+// ---------- Aeronave e trajetória ----------
+function desenharAviao(x, y, h) {
+  const k = 1/cam.s;
+  const corpo = () => {
+    ctx.beginPath();
+    ctx.moveTo(62, 0);
+    ctx.bezierCurveTo(62, -8, 50, -9, 40, -9);
+    ctx.lineTo(-48, -8);
+    ctx.lineTo(-64, -2.5);
+    ctx.lineTo(-64, 2.5);
+    ctx.lineTo(-48, 8);
+    ctx.lineTo(40, 9);
+    ctx.bezierCurveTo(50, 9, 62, 8, 62, 0);
+    ctx.closePath();
+  };
+  const asa = s => { ctx.beginPath(); ctx.moveTo(18, 7*s); ctx.lineTo(-14, 62*s); ctx.lineTo(-27, 62*s); ctx.lineTo(-12, 7*s); ctx.closePath(); };
+  const estab = s => { ctx.beginPath(); ctx.moveTo(-44, 5*s); ctx.lineTo(-56, 26*s); ctx.lineTo(-64, 26*s); ctx.lineTo(-58, 5*s); ctx.closePath(); };
+  ctx.save();
+  ctx.translate(x, y); ctx.rotate(h || 0);
+  // sombra
+  ctx.save(); ctx.translate(6, 8); ctx.globalAlpha *= 0.25; ctx.fillStyle = '#000';
+  corpo(); ctx.fill(); asa(1); ctx.fill(); asa(-1); ctx.fill(); estab(1); ctx.fill(); estab(-1); ctx.fill();
+  ctx.restore();
+  // asas e estabilizadores horizontais
+  ctx.fillStyle = '#cbd5e1'; ctx.strokeStyle = '#64748b'; ctx.lineWidth = 0.8*k;
+  asa(1); ctx.fill(); ctx.stroke(); asa(-1); ctx.fill(); ctx.stroke();
+  estab(1); ctx.fill(); ctx.stroke(); estab(-1); ctx.fill(); ctx.stroke();
+  // motores
+  ctx.fillStyle = '#94a3b8'; ctx.fillRect(-6, 30, 24, 8); ctx.fillRect(-6, -38, 24, 8);
+  ctx.fillStyle = '#334155'; ctx.fillRect(16, 30, 3, 8); ctx.fillRect(16, -38, 3, 8);
+  // fuselagem
+  ctx.fillStyle = '#f1f5f9'; corpo(); ctx.fill(); ctx.stroke();
+  // faixa de pintura, janelas e cabine
+  ctx.fillStyle = '#2563eb'; ctx.fillRect(-44, -1, 90, 2);
+  ctx.fillStyle = '#64748b';
+  for (let x0 = -40; x0 <= 30; x0 += 7) { ctx.fillRect(x0, -6.5, 3, 1.5); ctx.fillRect(x0, 5, 3, 1.5); }
+  ctx.fillStyle = '#1e293b'; ctx.fillRect(40, -5, 8, 10);
+  // portas (laranja quando a escorregadeira está armada)
+  for (const p of portas) { ctx.fillStyle = p.armada ? '#fb923c' : '#334155'; ctx.fillRect(p.lx - 3, p.ly - 1.5, 6, 3); }
+  ctx.restore();
+}
+function desenharAeronavePreview() {
+  let x = (ZONA.x1 + ZONA.x2)/2, y = (ZONA.y1 + ZONA.y2)/2, h = 0;
+  if (trajeto.length) {
+    x = trajeto[0].x; y = trajeto[0].y;
+    if (trajeto.length > 1) h = Math.atan2(trajeto[1].y - y, trajeto[1].x - x);
+  }
+  ctx.globalAlpha = 0.55; desenharAviao(x, y, h); ctx.globalAlpha = 1;
+}
+function desenharTrajeto() {
+  if (!trajeto.length) return;
+  const k = 1/cam.s;
+  ctx.setLineDash([10*k, 6*k]); ctx.strokeStyle = '#facc15'; ctx.lineWidth = 2*k;
+  ctx.beginPath(); ctx.moveTo(trajeto[0].x, trajeto[0].y);
+  for (let i = 1; i < trajeto.length; i++) ctx.lineTo(trajeto[i].x, trajeto[i].y);
+  ctx.stroke(); ctx.setLineDash([]);
+  trajeto.forEach((p, i) => {
+    ctx.fillStyle = i === trajeto.length - 1 ? '#ef4444' : '#facc15';
+    ctx.beginPath(); ctx.arc(p.x, p.y, 6*k, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle = '#111'; ctx.font = `bold ${8*k}px sans-serif`;
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(String(i + 1), p.x, p.y + 0.5*k);
+    ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+  });
+}
+function sairTrajeto() { modoTrajeto = false; }
+
+// ---------- Fogo localizado, escorregadeiras e passageiros ----------
+// Locais em coordenadas da aeronave (x para frente, y para a lateral).
+const LOCAIS = [
+  { re:/motor\s*(esquerd|1\b|um\b)/, lx:6,   ly:-34, nome:'motor esquerdo' },
+  { re:/motor\s*(direit|2\b|dois\b)/, lx:6,   ly:34,  nome:'motor direito' },
+  { re:/asa\s*esquerd/,               lx:-2,  ly:-35, nome:'asa esquerda' },
+  { re:/asa\s*direit/,                lx:-2,  ly:35,  nome:'asa direita' },
+  { re:/trem/,                        lx:10,  ly:0,   nome:'trem de pouso' },
+  { re:/cauda/,                       lx:-52, ly:0,   nome:'cauda' },
+  { re:/nariz|cockpit/,               lx:52,  ly:0,   nome:'nariz' },
+  { re:/cabine|fuselagem/,            lx:20,  ly:0,   nome:'fuselagem' }
+];
+const LOCAL_PADRAO = { motor:'motor esquerdo', combustivel:'asa esquerda', trem:'trem de pouso', fumaca:'fuselagem' };
+function normaliza(s) { return s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, ''); }
+// Procura no texto do caso os locais citados; se nenhum for citado, usa o local típico do tipo de emergência.
+function localizarFocos(texto, casoKey) {
+  const t = normaliza(texto || '');
+  let achados = LOCAIS.filter(l => l.re.test(t));
+  if (!achados.length && LOCAL_PADRAO[casoKey]) achados = LOCAIS.filter(l => l.nome === LOCAL_PADRAO[casoKey]);
+  return achados;
+}
+// Aeronave usada como referência: a do caso ou a de pré-visualização antes de iniciar.
+function aeroAtual() {
+  if (inc) return inc;
+  let x = (ZONA.x1 + ZONA.x2)/2, y = (ZONA.y1 + ZONA.y2)/2, h = 0;
+  if (trajeto.length) {
+    x = trajeto[0].x; y = trajeto[0].y;
+    if (trajeto.length > 1) h = Math.atan2(trajeto[1].y - y, trajeto[1].x - x);
+  }
+  return { x, y, h };
+}
+function aeroParaMundo(lx, ly, a = aeroAtual()) {
+  const c = Math.cos(a.h || 0), s = Math.sin(a.h || 0);
+  return { x: a.x + lx*c - ly*s, y: a.y + lx*s + ly*c };
+}
+function portaBloqueada(p) {
+  if (!inc || inc.fogo <= 0 || !inc.focos || !inc.focos.length) return false;
+  const d = aeroParaMundo(p.lx, p.ly);
+  return inc.focos.some(f => { const q = aeroParaMundo(f.lx, f.ly); return Math.hypot(q.x - d.x, q.y - d.y) < 30; });
+}
+// Chamas animadas: várias línguas de fogo oscilando em cada foco
+function desenharFogo() {
+  if (!inc || inc.fogo <= 0 || !inc.focos) return;
+  const t = performance.now() / 1000;
+  const base = 6 + inc.fogo * 0.16;
+  for (const foco of inc.focos) {
+    const p = aeroParaMundo(foco.lx, foco.ly);
+    for (let i = 0; i < 5; i++) {
+      const a = i * 1.26 + t * 3;
+      const dx = Math.cos(a) * base * 0.35 * (0.6 + 0.4 * Math.sin(t * 9 + i));
+      const dy = Math.sin(a) * base * 0.35;
+      const r = base * (0.45 + 0.2 * Math.sin(t * 11 + i * 2));
+      ctx.fillStyle = i % 2 ? 'rgba(255,90,0,0.7)' : 'rgba(255,170,0,0.75)';
+      ctx.beginPath(); ctx.arc(p.x + dx, p.y + dy, r, 0, Math.PI*2); ctx.fill();
+    }
+    ctx.fillStyle = 'rgba(255,235,120,0.9)'; ctx.beginPath(); ctx.arc(p.x, p.y, base * 0.3, 0, Math.PI*2); ctx.fill();
+  }
+}
+// Fumaça que sobe e se dispersa a partir do foco principal
+function desenharFumaca() {
+  if (!inc || inc.fumaca <= 0) return;
+  const t = performance.now() / 1000;
+  const o = inc.focos && inc.focos.length ? inc.focos[0] : { lx:20, ly:0 };
+  const o0 = aeroParaMundo(o.lx, o.ly);
+  const n = 3 + Math.floor(inc.fumaca / 25);
+  for (let i = 0; i < n; i++) {
+    const fase = (t * 0.35 + i / n) % 1;
+    const x = o0.x - fase * 40 + Math.sin(i * 2) * 4, y = o0.y - fase * 30;
+    ctx.globalAlpha = (1 - fase) * Math.min(0.75, inc.fumaca / 100);
+    ctx.fillStyle = '#d1d5db';
+    ctx.beginPath(); ctx.arc(x, y, 6 + fase * 22, 0, Math.PI*2); ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+}
+// Jato d'água das viaturas que estão combatendo
+function desenharJatos() {
+  if (!inc || estado !== 'andamento' || inc.fogo <= 0 || !inc.focos || !inc.focos.length) return;
+  const t = performance.now() / 1000, k = 1/cam.s;
+  for (const u of unidades) {
+    if (u.acao !== 'combate' || u.tanque <= 0 || DIST(u, inc) > RANGE) continue;
+    let alvo = null, dmin = Infinity;
+    for (const f of inc.focos) {
+      const q = aeroParaMundo(f.lx, f.ly), d = Math.hypot(q.x - u.x, q.y - u.y);
+      if (d < dmin) { dmin = d; alvo = q; }
+    }
+    ctx.strokeStyle = 'rgba(186,230,253,0.75)'; ctx.lineWidth = 2.2*k;
+    ctx.setLineDash([3*k, 4*k]); ctx.lineDashOffset = -t * 60 * k;
+    ctx.beginPath(); ctx.moveTo(u.x, u.y); ctx.lineTo(alvo.x, alvo.y); ctx.stroke();
+    ctx.setLineDash([]); ctx.lineDashOffset = 0;
+  }
+}
+// Comando de ação: se há caso em andamento, a viatura já se posiciona no alcance da aeronave
+function comandarAcao(u, act) {
+  if (inc && estado === 'andamento') {
+    const ang = Math.atan2(u.y - inc.y, u.x - inc.x);
+    executar({ tipo:'ataque', id:u.id, acao:act, x: inc.x + Math.cos(ang)*RANGE*0.7, y: inc.y + Math.sin(ang)*RANGE*0.7 });
+  } else {
+    executar({ tipo:'acao', id:u.id, acao:act });
+  }
+  $('msg').textContent = u.id + ': ' + ACAO_ROTULO[act] + '.';
+}
+// Clique direito perto da aeronave com unidade selecionada: comando rápido
+function acaoRapida(pt) {
+  const u = unidadePorId(selId);
+  if (!u || !inc || estado !== 'andamento') return;
+  const p = toWorld(pt.x, pt.y);
+  if (DIST(p, inc) > 120) return;
+  const acao = { AB:'combate', AP:'combate', UR:'resgate', AMB:'atendimento' }[u.tipo];
+  if (acao) comandarAcao(u, acao);
+}
+function desenharEscorregadeiras() {
+  const k = 1/cam.s;
+  for (const p of portas) {
+    const d = aeroParaMundo(p.lx, p.ly);
+    if (p.armada) {
+      const e = aeroParaMundo(p.lx + 8, p.ly + p.lado*44);
+      const bloq = portaBloqueada(p);
+      ctx.strokeStyle = 'rgba(0,0,0,0.5)'; ctx.lineWidth = 7*k;
+      ctx.beginPath(); ctx.moveTo(d.x, d.y); ctx.lineTo(e.x, e.y); ctx.stroke();
+      ctx.strokeStyle = bloq ? '#ef4444' : '#fb923c'; ctx.lineWidth = 4.5*k;
+      ctx.beginPath(); ctx.moveTo(d.x, d.y); ctx.lineTo(e.x, e.y); ctx.stroke();
+      ctx.fillStyle = bloq ? '#ef4444' : '#fde68a';
+      ctx.beginPath(); ctx.arc(e.x, e.y, 3*k, 0, Math.PI*2); ctx.fill();
+    }
+    ctx.font = `bold ${9*k}px sans-serif`; ctx.fillStyle = '#fff'; ctx.strokeStyle = 'rgba(0,0,0,0.8)'; ctx.lineWidth = 3*k;
+    ctx.strokeText(p.id, d.x - 4, d.y - 6); ctx.fillText(p.id, d.x - 4, d.y - 6);
+  }
+}
+function desenharPessoas() {
+  const k = 1/cam.s;
+  for (const q of pessoas) {
+    const p = portas[q.porta];
+    const w = aeroParaMundo(p.lx + 8*q.t, p.ly + p.lado*44*q.t);
+    ctx.strokeStyle = 'rgba(0,0,0,0.7)'; ctx.lineWidth = k;
+    ctx.fillStyle = '#e0f2fe'; ctx.beginPath(); ctx.arc(w.x, w.y - 4, 2.6, 0, Math.PI*2); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = '#0ea5e9'; ctx.fillRect(w.x - 3, w.y - 1, 6, 7);
+  }
+}
+function atualizarPortas() {
+  const box = $('portasList');
+  if (!box.children.length) {
+    portas.forEach((p, i) => {
+      const d = document.createElement('div'); d.className = 'linha';
+      d.innerHTML = '<b style="width:30px">' + p.id + '</b><span style="flex:1;font-size:12px">' + p.nome + '<br><span id="pst' + i + '"></span></span><button id="pbt' + i + '" class="sec"></button>';
+      box.appendChild(d);
+      $('pbt' + i).onclick = () => executar({ tipo:'porta', id:p.id });
+    });
+  }
+  portas.forEach((p, i) => {
+    let st;
+    if (!p.armada) st = 'fechada';
+    else if (portaBloqueada(p)) st = 'armada · bloqueada pelo fogo';
+    else if (inc && inc.movendo) st = 'armada · aguardando parada';
+    else st = 'armada · pronta';
+    $('pst' + i).textContent = st;
+    $('pbt' + i).textContent = p.armada ? 'Desarmar' : 'Armar';
+    $('pbt' + i).className = p.armada ? 'ativo' : 'sec';
+  });
+}
+
+// ---------- Desenho ----------
+function desenharVeiculo(u) {
+  const t = TIPOS[u.tipo], L = 34, Wd = 15, k = 1/cam.s;
+  if (u.id === selId) {
+    ctx.strokeStyle = '#fff'; ctx.lineWidth = 2*k; ctx.setLineDash([4*k,3*k]);
+    ctx.beginPath(); ctx.arc(u.x, u.y, 24, 0, Math.PI*2); ctx.stroke(); ctx.setLineDash([]);
+  }
+  ctx.save();
+  ctx.translate(u.x, u.y); ctx.rotate(u.h || 0);
+  // sombra
+  ctx.fillStyle = 'rgba(0,0,0,0.35)'; ctx.fillRect(-L/2+2, -Wd/2+3, L, Wd);
+  // rodas
+  ctx.fillStyle = '#111';
+  for (const [x, y] of [[-L/2+6,-Wd/2-2],[-L/2+6,Wd/2-1],[L/2-12,-Wd/2-2],[L/2-12,Wd/2-1]]) ctx.fillRect(x, y, 6, 3);
+  // carroceria e cabine
+  ctx.fillStyle = t.cor; ctx.fillRect(-L/2, -Wd/2, L, Wd);
+  ctx.fillStyle = 'rgba(255,255,255,0.28)'; ctx.fillRect(-L/2 + 1, -Wd/2 + 1, L - 2, 3);
+  ctx.fillStyle = t.cab; ctx.fillRect(L/2-10, -Wd/2, 10, Wd);
+  ctx.fillStyle = 'rgba(186,230,253,0.85)'; ctx.fillRect(L/2-8, -Wd/2+2, 5, Wd-4);
+  ctx.strokeStyle = '#1f2937'; ctx.lineWidth = k; ctx.strokeRect(-L/2, -Wd/2, L, Wd);
+  // detalhes por tipo
+  if (u.tipo === 'AB' || u.tipo === 'AP') {
+    ctx.fillStyle = '#dc2626'; ctx.fillRect(-L/2+3, -1.2, L-14, 2.4);
+    ctx.beginPath(); ctx.arc(-L/2+8, 0, 3, 0, Math.PI*2); ctx.fill();
+  } else if (u.tipo === 'UR') {
+    ctx.fillStyle = '#111'; ctx.fillRect(-L/2+3, -1, L-14, 2);
+    ctx.fillStyle = '#f8fafc'; ctx.fillRect(-L/2+8, -Wd/2+2, 6, 2);
+  } else if (u.tipo === 'AMB') {
+    ctx.fillStyle = '#1d4ed8'; ctx.fillRect(-L/2, -1.4, L, 2.8);
+    ctx.fillStyle = '#dc2626'; ctx.fillRect(-7.5, -4, 3, 8); ctx.fillRect(-10.5, -1.5, 9, 3);
+    ctx.fillStyle = '#3b82f6'; ctx.beginPath(); ctx.arc(-L/2+6, 0, 2.5, 0, Math.PI*2); ctx.fill();
+  } else if (u.tipo === 'CMD') {
+    ctx.fillStyle = '#fff'; ctx.fillRect(-L/2+3, -1, L-14, 2);
+  }
+  // número da unidade desenhado sobre a viatura (ex.: CCI 1 -> "1")
+  const num = (u.id.match(/\d+$/) || [])[0];
+  if (num) {
+    const nx = L/2 - 20;
+    ctx.fillStyle = '#ffffff'; ctx.beginPath(); ctx.arc(nx, 0, 6.5, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle = '#111'; ctx.font = 'bold 9px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(num, nx, 0.5);
+    ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+  }
+  ctx.restore();
+  // luzes de emergência: piscam quando a unidade está em operação ou deslocamento
+  if (u.acao !== 'parado' || u.dest) {
+    const fase = Math.floor(performance.now() / 110) % 2;
+    ctx.fillStyle = fase ? 'rgba(239,68,68,0.9)' : 'rgba(59,130,246,0.9)';
+    ctx.beginPath(); ctx.arc(u.x + 6, u.y - 9, 3.2, 0, Math.PI*2); ctx.fill();
+    ctx.strokeStyle = 'rgba(0,0,0,0.6)'; ctx.lineWidth = k; ctx.stroke();
+  }
+  // identificação
+  ctx.font = `bold ${11*k}px sans-serif`; ctx.lineWidth = 3*k;
+  ctx.strokeStyle = 'rgba(0,0,0,0.8)'; ctx.fillStyle = '#fff';
+  ctx.strokeText(u.id, u.x - 10, u.y - 15); ctx.fillText(u.id, u.x - 10, u.y - 15);
+}
+
+function desenhar() {
+  ctx.setTransform(1,0,0,1,0,0);
+  ctx.fillStyle = '#0f172a'; ctx.fillRect(0, 0, cv.width, cv.height);
+  ctx.setTransform(cam.s, 0, 0, cam.s, cam.ox, cam.oy);
+  const k = 1/cam.s;
+
+  if (IMG.complete && IMG.naturalWidth > 0) ctx.drawImage(IMG, 0, 0, IMG_W, IMG_H);
+  else { ctx.fillStyle = '#2c3a2e'; ctx.fillRect(0, 0, IMG_W, IMG_H); }
+
+  const txt = (t, x, y) => { ctx.strokeText(t, x, y); ctx.fillText(t, x, y); };
+  ctx.font = `bold ${12*k}px sans-serif`; ctx.lineWidth = 3*k; ctx.strokeStyle = 'rgba(0,0,0,0.75)'; ctx.fillStyle = '#fff';
+
+  // áreas
+  for (const a of areas) {
+    const c = AREAS[a.tipo].cor;
+    ctx.globalAlpha = 0.18; ctx.fillStyle = c;
+    ctx.beginPath(); ctx.arc(a.x, a.y, a.r, 0, Math.PI*2); ctx.fill();
+    ctx.globalAlpha = 1;
+    ctx.strokeStyle = c; ctx.lineWidth = (a.id === selAreaId ? 3 : 1.5)*k;
+    ctx.setLineDash([6*k, 4*k]); ctx.beginPath(); ctx.arc(a.x, a.y, a.r, 0, Math.PI*2); ctx.stroke(); ctx.setLineDash([]);
+    const n = unidades.filter(u => u.area === a.id).length;
+    ctx.fillStyle = '#fff'; ctx.strokeStyle = 'rgba(0,0,0,0.75)'; ctx.lineWidth = 3*k;
+    txt(a.id + ' (' + n + ')', a.x - 30, a.y - a.r - 6*k);
+  }
+
+  // base SESCINC
+  ctx.fillStyle = '#b91c1c'; ctx.fillRect(BASE.x - 8, BASE.y - 8, 16, 16);
+  ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.5*k; ctx.strokeRect(BASE.x - 8, BASE.y - 8, 16, 16);
+  ctx.fillStyle = '#fff'; ctx.strokeStyle = 'rgba(0,0,0,0.75)'; ctx.lineWidth = 3*k;
+  txt('SESCINC', BASE.x - 30, BASE.y + 24);
+
+  // aeronave
+  if (inc) {
+    ctx.setLineDash([6*k, 5*k]); ctx.strokeStyle = 'rgba(255,255,255,0.3)'; ctx.lineWidth = k;
+    ctx.beginPath(); ctx.arc(inc.x, inc.y, RANGE, 0, Math.PI*2); ctx.stroke(); ctx.setLineDash([]);
+    desenharFumaca();
+    desenharAviao(inc.x, inc.y, inc.h);
+    desenharFogo();
+    ctx.fillStyle = '#fff'; ctx.strokeStyle = 'rgba(0,0,0,0.75)'; ctx.lineWidth = 3*k;
+    txt('Pax ' + inc.pax, inc.x - 30, inc.y - 38);
+  }
+
+  // O atendente não vê a aeronave, a trajetória nem as escorregadeiras antes do início do cenário
+  const apresentador = papel !== 'atendente';
+  if (inc || apresentador) desenharEscorregadeiras();
+  desenharPessoas();
+  if (!inc && apresentador) desenharAeronavePreview();
+  if (apresentador) desenharTrajeto();
+  // destinos
+  ctx.setLineDash([5*k, 4*k]); ctx.lineWidth = 1.5*k; ctx.strokeStyle = 'rgba(255,255,255,0.7)';
+  for (const u of unidades) if (u.dest) { ctx.beginPath(); ctx.moveTo(u.x, u.y); ctx.lineTo(u.dest.x, u.dest.y); ctx.stroke(); }
+  ctx.setLineDash([]);
+
+  // pré-visualização da base (configuração)
+  if (cfgAberta && cfgPrev) {
+    ctx.strokeStyle = '#22d3ee'; ctx.lineWidth = 2*k;
+    ctx.beginPath(); ctx.arc(cfgPrev.x, cfgPrev.y, 12, 0, Math.PI*2); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(cfgPrev.x-18, cfgPrev.y); ctx.lineTo(cfgPrev.x+18, cfgPrev.y);
+    ctx.moveTo(cfgPrev.x, cfgPrev.y-18); ctx.lineTo(cfgPrev.x, cfgPrev.y+18); ctx.stroke();
+  }
+
+  desenharJatos();
+  for (const u of unidades) desenharVeiculo(u);
+}
+
+// ---------- Interação com o mapa ----------
+// Esquerdo em área vazia ou direito arrastado: move o mapa. Clique sem arrastar: comanda a seleção.
+cv.addEventListener('contextmenu', e => e.preventDefault());
+cv.addEventListener('wheel', e => {
+  e.preventDefault();
+  zoomEm(e.deltaY < 0 ? 1.15 : 1/1.15, e.clientX, e.clientY);
+}, { passive:false });
+
+cv.addEventListener('mousedown', e => {
+  if (e.button === 2) { panning = { x:e.clientX, y:e.clientY, ox:cam.ox, oy:cam.oy, moved:false, dir:true }; return; }
+  if (e.button !== 0 || cfgAberta) return;
+  const p = toWorld(e.clientX, e.clientY);
+  if (modoTrajeto) { trajeto.push({ x:p.x, y:p.y }); return; }
+  if (placing) {
+    executar({ tipo:'add', item:placing, x:p.x, y:p.y });
+    placing = null; atualizarPlace();
+    return;
+  }
+  const u = unidadeEm(p);
+  if (u) { selecionarUnidade(u.id); drag = { u, x0:p.x, y0:p.y, moved:false }; return; }
+  panning = { x:e.clientX, y:e.clientY, ox:cam.ox, oy:cam.oy, moved:false, dir:false, p };
+});
+window.addEventListener('mousemove', e => {
+  if (panning) {
+    cam.ox = panning.ox + (e.clientX - panning.x); cam.oy = panning.oy + (e.clientY - panning.y);
+    if (Math.hypot(e.clientX - panning.x, e.clientY - panning.y) > 4) panning.moved = true;
+    cam.user = true; clampCam(); return;
+  }
+  if (!drag) return;
+  const p = toWorld(e.clientX, e.clientY);
+  if (!drag.moved && Math.hypot(p.x - drag.x0, p.y - drag.y0) * cam.s > 4) drag.moved = true;
+  drag.px = p.x; drag.py = p.y;
+  if (drag.moved && papel !== 'atendente') {
+    const u = drag.u;
+    u.x = p.x; u.y = p.y; u.dest = null; u.area = null; u.prog = 0;
+    if (u.acao === 'base') u.acao = 'parado';
+  }
+});
+window.addEventListener('mouseup', () => {
+  if (drag && drag.moved && papel === 'atendente') executar({ tipo:'mover', id:drag.u.id, x:drag.px, y:drag.py });
+  if (panning && !panning.moved) {
+    if (panning.dir) acaoRapida(panning);
+    else cliqueMapa(panning.p);
+  }
+  drag = null; panning = null;
+});
+// Clique em área vazia ou em área: envia a viatura selecionada, ou seleciona a área
+function cliqueMapa(p) {
+  const a = areaEm(p), s = unidadePorId(selId);
+  if (a) {
+    if (s && estado !== 'encerrado') executar({ tipo:'area', id:s.id, areaId:a.id });
+    else selecionarArea(a.id);
+    return;
+  }
+  if (s && estado !== 'encerrado') executar({ tipo:'destino', id:s.id, x:p.x, y:p.y });
+  else { selAreaId = null; }
+}
+
+// Clique no mapa com o painel de configuração aberto marca a base
+cv.addEventListener('click', e => {
+  if (!cfgAberta) return;
+  const p = toWorld(e.clientX, e.clientY);
+  cfgPrev = { x:clamp(Math.round(p.x),0,IMG_W), y:clamp(Math.round(p.y),0,IMG_H) };
+  $('bx').value = cfgPrev.x; $('by').value = cfgPrev.y;
+});
+
+document.addEventListener('keydown', e => {
+  if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') return;
+  const cx = innerWidth/2, cy = innerHeight/2;
+  if (e.key === 'Escape') {
+    if (placing) { placing = null; atualizarPlace(); }
+    else if (modoTrajeto) sairTrajeto();
+    else { selId = null; selAreaId = null; }
+  }
+  if (e.key === 'Delete') {
+    if (selId) executar({ tipo:'remover', id:selId });
+    else if (selAreaId) executar({ tipo:'remArea', id:selAreaId });
+  }
+  if (e.key === '+' || e.key === '=') zoomEm(1.2, cx, cy);
+  if (e.key === '-' || e.key === '_') zoomEm(1/1.2, cx, cy);
+  if (e.key === 'f' || e.key === 'F') resetCam();
+  if (e.key === 'c' || e.key === 'C') centralizar();
+  const passo = 80, setas = { ArrowLeft:[passo,0], ArrowRight:[-passo,0], ArrowUp:[0,passo], ArrowDown:[0,-passo] };
+  if (setas[e.key]) {
+    e.preventDefault();
+    cam.ox += setas[e.key][0]; cam.oy += setas[e.key][1];
+    cam.user = true; clampCam();
+  }
+});
+
+// ---------- Painel ----------
+function atualizarPlace() {
+  const nomes = { ...Object.fromEntries(Object.entries(TIPOS).map(([k,v]) => [k, v.nome])), ...Object.fromEntries(Object.entries(AREAS).map(([k,v]) => [k, v.nome])) };
+  $('placeTxt').textContent = placing
+    ? 'Clique no mapa para posicionar: ' + nomes[placing] + '. Esc cancela.'
+    : '';
+}
+document.querySelectorAll('[data-add]').forEach(b => b.onclick = () => { placing = b.dataset.add; atualizarPlace(); });
+
+// Barra de comando: só mostra as ações que a viatura selecionada pode executar
+document.querySelectorAll('#barraCmd [data-acao]').forEach(b => b.onclick = () => {
+  const u = unidadePorId(selId); if (!u) return;
+  const act = b.dataset.acao;
+  if (act === 'base') executar({ tipo:'base', id:u.id });
+  else if (act === 'parado') executar({ tipo:'acao', id:u.id, acao:'parado' });
+  else comandarAcao(u, act);
+});
+$('barraEnviar').onclick = () => {
+  const u = unidadePorId(selId), a = areaPorId($('barraArea').value);
+  if (u && a) executar({ tipo:'area', id:u.id, areaId:a.id });
+};
+$('barraSair').onclick = () => { if (selId) executar({ tipo:'sair', id:selId }); };
+$('barraRem').onclick = () => {
+  if (selId) executar({ tipo:'remover', id:selId });
+  else if (selAreaId) executar({ tipo:'remArea', id:selAreaId });
+};
+
+function atualizarBarra() {
+  const u = unidadePorId(selId), a = areaPorId(selAreaId);
+  const key = (u ? 'u' + u.id + '|' + u.acao + '|' + (u.area || '') : a ? 'a' + a.id : 'n') + '|' + estado + '|' + areas.map(x => x.id).join(',');
+  if (key === barraKey) return;
+  barraKey = key;
+  if (u) $('barraNome').textContent = u.id + ' · ' + TIPOS[u.tipo].nome;
+  else if (a) $('barraNome').textContent = a.id + ' · ' + AREAS[a.tipo].nome;
+  else $('barraNome').textContent = 'Nenhuma seleção';
+  document.querySelectorAll('#barraCmd [data-acao]').forEach(b => {
+    const act = b.dataset.acao;
+    const mostra = u ? (act === 'base' ? !!TIPOS[u.tipo].tanque : TIPOS[u.tipo].acoes.includes(act)) : false;
+    b.style.display = mostra ? '' : 'none';
+    b.className = (u && u.acao === act) ? 'ativo' : (act === 'parado' || act === 'base' ? 'sec' : '');
+  });
+  const enviar = !!u && areas.length > 0;
+  const sel = $('barraArea');
+  if (enviar) {
+    const prev = sel.value;
+    sel.innerHTML = '';
+    areas.forEach(x => { const o = document.createElement('option'); o.value = x.id; o.textContent = x.id + ' · ' + AREAS[x.tipo].nome; sel.appendChild(o); });
+    if (areas.some(x => x.id === prev)) sel.value = prev;
+  }
+  sel.style.display = enviar ? '' : 'none';
+  $('barraEnviar').style.display = enviar ? '' : 'none';
+  $('barraSair').style.display = (u && u.area) ? '' : 'none';
+  $('barraRem').style.display = (u || a) ? '' : 'none';
+}
+
+function atualizarSel() {
+  const u = unidadePorId(selId), a = areaPorId(selAreaId);
+  let html, key;
+  if (u) {
+    const temTanque = !!TIPOS[u.tipo].tanque;
+    const pct = temTanque ? Math.max(0, Math.round(u.tanque / TIPOS[u.tipo].tanque * 100)) : 0;
+    key = 'u' + u.id + '|' + statusDe(u) + '|' + (u.area || '') + '|' + pct;
+    html = '<b>' + u.id + '</b> · ' + TIPOS[u.tipo].nome + '<br>' + statusDe(u) +
+           (temTanque ? '<div class="bar"><div style="width:' + pct + '%"></div></div><div class="peq">Agente: ' + pct + '%</div>' : '');
+  } else if (a) {
+    const ids = unidades.filter(x => x.area === a.id).map(x => x.id);
+    key = 'a' + a.id + '|' + ids.join(',');
+    html = '<b>' + a.id + '</b> · ' + AREAS[a.tipo].nome + '<div class="peq">Unidades na área: ' + (ids.length ? ids.join(', ') : 'nenhuma') + '</div>';
+  } else {
+    key = 'n';
+    html = 'Nenhuma seleção. Clique em uma viatura ou área no mapa.';
+  }
+  if (key !== selKey) { selKey = key; $('selInfo').innerHTML = html; }
+}
+
+function atualizarRoster() {
+  const key = unidades.map(u => u.id + '|' + statusDe(u) + '|' + (u.id === selId)).join(';') + '#' +
+              areas.map(a => a.id + '|' + (a.id === selAreaId)).join(';');
+  if (key === rosterKey) return;
+  rosterKey = key;
+  const r = $('roster'); r.innerHTML = '';
+  if (!unidades.length && !areas.length) r.innerHTML = '<p class="peq">Nada no mapa ainda.</p>';
+  unidades.forEach(u => {
+    const d = document.createElement('div');
+    d.className = 'row' + (u.id === selId ? ' sel' : '');
+    d.dataset.id = u.id;
+    d.innerHTML = '<b>' + u.id + '</b> <i>' + TIPOS[u.tipo].nome + '</i><br>' + statusDe(u);
+    r.appendChild(d);
+  });
+  areas.forEach(a => {
+    const d = document.createElement('div');
+    d.className = 'row' + (a.id === selAreaId ? ' sel' : '');
+    d.dataset.area = a.id;
+    d.innerHTML = '<b>' + a.id + '</b> <i>' + AREAS[a.tipo].nome + '</i>';
+    r.appendChild(d);
+  });
+}
+$('roster').addEventListener('click', e => {
+  const row = e.target.closest('.row'); if (!row) return;
+  if (row.dataset.id) selecionarUnidade(row.dataset.id);
+  else if (row.dataset.area) selecionarArea(row.dataset.area);
+});
+
+function setPainel(aberto) {
+  painelAberto = aberto;
+  document.body.classList.toggle('sem-painel', !aberto);
+  $('painelBtn').textContent = aberto ? 'Ocultar painel' : 'Mostrar painel';
+}
+$('painelBtn').onclick = () => { setPainel(!painelAberto); };
+
+// ---------- Botões do mapa e do cabeçalho ----------
+$('zIn').onclick = () => zoomEm(1.25, innerWidth/2, innerHeight/2);
+$('zOut').onclick = () => zoomEm(1/1.25, innerWidth/2, innerHeight/2);
+$('zFit').onclick = resetCam;
+$('zCentro').onclick = centralizar;
+$('start').onclick = () => { if (estado !== 'andamento') iniciarCaso(); };
+$('end').onclick = () => { if (estado === 'andamento') encerrarCaso(); };
+$('pause').onclick = () => { pausado = !pausado; };
+$('pathBtn').onclick = () => { modoTrajeto = !modoTrajeto; };
+$('pathUndo').onclick = () => { trajeto.pop(); };
+$('pathClear').onclick = () => { trajeto = []; };
+
+// ---------- Configurações (somente apresentador) ----------
+const PAINEIS = ['secCaso','secPortas','secPath','secUni','secSel'];
+function abrirCfg() {
+  if (estado === 'andamento') { $('msg').textContent = 'A base não pode ser alterada durante o caso.'; return; }
+  setPainel(true);
+  cfgAberta = true; cfgPrev = { x:BASE.x, y:BASE.y };
+  $('bx').value = cfgPrev.x; $('by').value = cfgPrev.y;
+  PAINEIS.forEach(id => $(id).style.display = 'none');
+  $('cfg').style.display = 'block';
+  $('barra').style.display = 'none';
+  $('cfgBtn').textContent = 'Voltar';
+}
+function fecharCfg() {
+  cfgAberta = false; cfgPrev = null;
+  $('cfg').style.display = 'none';
+  PAINEIS.forEach(id => $(id).style.display = '');
+  $('barra').style.display = '';
+  $('cfgBtn').textContent = 'Configurações';
+}
+function lerInputs() {
+  const x = Number($('bx').value), y = Number($('by').value);
+  cfgPrev = { x:clamp(Number.isFinite(x)?x:BASE.x,0,IMG_W), y:clamp(Number.isFinite(y)?y:BASE.y,0,IMG_H) };
+}
+$('bx').oninput = lerInputs;
+$('by').oninput = lerInputs;
+$('cfgSalvar').onclick = () => {
+  lerInputs();
+  aplicarBase(cfgPrev);
+  salvarBase({ x:BASE.x, y:BASE.y });
+  fecharCfg();
+  $('msg').textContent = 'Base SESCINC salva em (' + Math.round(BASE.x) + ', ' + Math.round(BASE.y) + ').';
+};
+$('cfgPadrao').onclick = () => { $('bx').value = BASE_PADRAO.x; $('by').value = BASE_PADRAO.y; lerInputs(); };
+$('cfgCancelar').onclick = fecharCfg;
+$('cfgBtn').onclick = () => cfgAberta ? fecharCfg() : abrirCfg();
+
+// ---------- Atualização da interface ----------
+function atualizarUI() {
+  $('time').textContent = mmss(tempo);
+  $('fogo').textContent = inc ? Math.round(inc.fogo) + '%' : '--';
+  $('fumaca').textContent = inc ? Math.round(inc.fumaca) + '%' : '--';
+  $('pax').textContent = inc ? inc.pax : '--';
+  $('feridos').textContent = inc ? inc.feridos : '--';
+  $('resg').textContent = inc ? inc.resgatados : '--';
+  $('aten').textContent = inc ? inc.atendidos : '--';
+  $('evac').textContent = inc ? inc.evacuados : '--';
+  atualizarPortas();
+  $('pause').textContent = pausado ? 'Continuar' : 'Pausar';
+  $('pause').className = pausado ? 'ativo' : 'sec';
+  const andando = estado === 'andamento';
+  $('start').disabled = andando;
+  $('end').disabled = !andando;
+  $('tipo').disabled = andando;
+  $('desc').disabled = andando;
+  $('cfgBtn').disabled = andando;
+  if (andando) modoTrajeto = false;
+  $('pathBtn').disabled = andando;
+  $('pathBtn').textContent = modoTrajeto ? 'Parar de traçar' : 'Traçar trajetória';
+  $('pathBtn').className = modoTrajeto ? 'ativo' : 'sec';
+  $('pathUndo').disabled = andando || !trajeto.length;
+  $('pathClear').disabled = andando || !trajeto.length;
+  $('pathInfo').textContent = modoTrajeto
+    ? 'Clique no mapa para adicionar pontos. Esc ou "Parar de traçar" encerra.'
+    : (trajeto.length < 2
+        ? 'Trace pelo menos 2 pontos para a aeronave se mover. Com um ponto, ela fica parada ali.'
+        : 'Pontos: ' + trajeto.length + '. A aeronave percorre o traçado e para no último ponto (vermelho).');
+  cv.style.cursor = (placing || modoTrajeto) ? 'crosshair' : (panning ? 'grabbing' : 'default');
+  atualizarRoster();
+  atualizarSel();
+  atualizarBarra();
+  atualizarTwr();
+}
+
+// ---------- TWR (controle) ----------
+// O atendente pede informações; o administrador responde com a ficha do caso.
+const TWR_ROTULO = { pax:'Passageiros', comb:'Combustível', pane:'Pane / emergência', cia:'Companhia', aero:'Tipo de aeronave' };
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;' }[c]));
+function fichaCaso() {
+  const cs = CASOS[selTipo.value];
+  const descTxt = $('desc').value.trim();
+  return {
+    pax: Number($('fPax').value) || cs.pax,
+    comb: $('fComb').value.trim() || 'não informado',
+    cia: $('fCia').value.trim() || 'não informada',
+    aero: $('fAero').value.trim() || 'não informado',
+    pane: cs.nome + (descTxt ? ': ' + descTxt : '')
+  };
+}
+function textoTWR(item) {
+  const f = fichaCaso();
+  if (item === 'pax') return f.pax + ' pessoas a bordo';
+  if (item === 'comb') return f.comb;
+  if (item === 'pane') return f.pane;
+  if (item === 'cia') return f.cia;
+  if (item === 'aero') return f.aero;
+  return '';
+}
+// Administrador: responde ao pedido, liberando a informação ao atendente
+function responderTWR(id) {
+  const p = twrPedidos.find(x => x.id === id);
+  if (!p || p.status !== 'pendente') return;
+  p.status = 'respondido';
+  twrRespostas.push({ id:p.id, item:p.item, texto:textoTWR(p.item) });
+}
+function atualizarTwr() {
+  // Administrador: lista de pedidos pendentes
+  const pend = twrPedidos.filter(p => p.status === 'pendente');
+  const kPed = pend.map(p => p.id).join(',');
+  if (kPed !== twrKey) {
+    twrKey = kPed;
+    const box = $('twrPedidosList');
+    if (!pend.length) box.textContent = 'Nenhum pedido pendente.';
+    else {
+      box.innerHTML = '';
+      pend.forEach(p => {
+        const d = document.createElement('div'); d.className = 'linha';
+        d.innerHTML = '<span style="flex:1">' + TWR_ROTULO[p.item] + '</span><button data-resp="' + p.id + '">Responder</button>';
+        box.appendChild(d);
+      });
+    }
+  }
+  // Atendente: respostas liberadas
+  const kResp = twrRespostas.map(r => r.id).join(',');
+  if (kResp !== twrRespKey) {
+    twrRespKey = kResp;
+    $('twrRespostas').innerHTML = twrRespostas.length
+      ? twrRespostas.map(r => '<div style="margin:3px 0"><b>' + esc(TWR_ROTULO[r.item]) + ':</b> ' + esc(r.texto) + '</div>').join('')
+      : 'Nenhuma resposta da TWR ainda.';
+  }
+}
+$('twrPedidosList').addEventListener('click', e => {
+  const b = e.target.closest('[data-resp]'); if (b) responderTWR(b.dataset.resp);
+});
+document.querySelectorAll('[data-pedido]').forEach(b => b.onclick = () => {
+  executar({ tipo:'pedido', item:b.dataset.pedido });
+  $('msg').textContent = 'Pedido enviado à TWR: ' + TWR_ROTULO[b.dataset.pedido] + '.';
+});
+
+// ---------- Sincronização entre apresentador e atendente ----------
+// O apresentador roda a simulação e publica o estado em "sala/estado".
+// O atendente recebe esse estado e envia comandos em "comandos", que o apresentador aplica.
+let papel = 'local';           // local | apresentador | atendente
+let rede = null;               // espaço de dados compartilhado (db)
+const processados = new Set();
+let ultimoEnvio = '';
+// Cada sala tem um código. O estado fica em "salas/<código>" (só o apresentador grava)
+// e os comandos dos atendentes em "comandos/<código>/itens".
+let sala = null;
+const GERADOR = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';   // sem I, L, O e 0/1 para não confundir
+const CODIGO_VALIDO = /^[ABCDEFGHJKMNPQRSTUVWXYZ2-9]{6}$/;
+function gerarCodigo() {
+  const r = crypto.getRandomValues(new Uint32Array(6));
+  let s = '';
+  for (const n of r) s += GERADOR[n % GERADOR.length];
+  return s;
+}
+const estadoDoc = () => rede.doc('salas/' + sala);
+const comandosCol = () => rede.collection('comandos/' + sala + '/itens');
+
+// Ajusta a interface ao papel: o atendente não vê as opções de criação do cenário
+function aplicarPapelUI() {
+  document.body.dataset.papel = papel;
+  if (papel === 'atendente') {
+    $('msg').textContent = 'Aguardando o início do cenário pelo apresentador. Posicione viaturas e áreas e comande as ações.';
+  }
+}
+
+function dadosDe(x) {
+  if (!x) return null;
+  if (typeof x.data === 'function') return x.data();
+  if (x.data !== undefined) return x.data;
+  return x;
+}
+
+// Atendente: envia o comando ao apresentador. Local/apresentador: aplica na hora.
+function executar(c) {
+  if (c.tipo === 'pedido' && !c.rid) c = { ...c, rid: 'p' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7) };
+  if (papel === 'atendente' && rede) {
+    const id = 'c' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+    Promise.resolve(comandosCol().doc(id).set({ ...c, t: Date.now() }))
+      .catch(() => { $('msg').textContent = 'Não foi possível enviar o comando. Verifique se você tem permissão de atendente.'; });
+    return;
+  }
+  aplicarComando(c, true);
+}
+
+function aplicarComando(c, local) {
+  const u = c.id ? unidadePorId(c.id) : null;
+  switch (c.tipo) {
+    case 'add':
+      if (AREAS[c.item]) { const a = criarArea(c.item, c.x, c.y); areas.push(a); if (local) selecionarArea(a.id); }
+      else if (TIPOS[c.item]) { const n = criarUnidade(c.item, c.x, c.y); unidades.push(n); if (local) selecionarUnidade(n.id); }
+      break;
+    case 'destino':
+      if (u && estado !== 'encerrado') { u.dest = { x:c.x, y:c.y }; u.area = null; if (u.acao === 'base') u.acao = 'parado'; u.prog = 0; }
+      break;
+    case 'mover':
+      if (u) { u.x = c.x; u.y = c.y; u.dest = null; u.area = null; if (u.acao === 'base') u.acao = 'parado'; u.prog = 0; }
+      break;
+    case 'ataque':
+      if (u && estado === 'andamento') { u.dest = { x:c.x, y:c.y }; u.area = null; u.acao = c.acao; u.prog = 0; }
+      break;
+    case 'acao':
+      if (u) { u.acao = c.acao; if (u.acao === 'parado') u.dest = null; u.prog = 0; }
+      break;
+    case 'base':
+      if (u) { u.area = null; u.acao = 'base'; u.dest = { x:BASE.x, y:BASE.y }; u.prog = 0; }
+      break;
+    case 'area': {
+      const a = areaPorId(c.areaId);
+      if (u && a) enviarArea(u, a);
+      break;
+    }
+    case 'sair':
+      if (u) u.area = null;
+      break;
+    case 'remover':
+      if (u) { unidades = unidades.filter(x => x.id !== u.id); if (local && selId === u.id) selId = null; }
+      break;
+    case 'remArea': {
+      const a = areaPorId(c.id);
+      if (a) {
+        unidades.forEach(x => { if (x.area === a.id) x.area = null; });
+        areas = areas.filter(x => x.id !== a.id);
+        if (local && selAreaId === a.id) selAreaId = null;
+      }
+      break;
+    }
+    case 'pedido':
+      if (c.rid && !twrPedidos.some(p => p.id === c.rid)) twrPedidos.push({ id:c.rid, item:c.item, status:'pendente' });
+      break;
+    case 'porta': {
+      const p = portas.find(x => x.id === c.id);
+      if (p) { p.armada = !p.armada; p.prog = 0; }
+      break;
+    }
+  }
+}
+
+// Estado completo da simulação, publicado pelo apresentador
+// Só vai para o atendente o que ele pode ver: antes do início, apenas viaturas, áreas e a base.
+// Trajetória, descrição, tipo de caso, categoria e configuração de portas ficam restritos ao apresentador
+// e só são enviados quando o cenário começa (a aeronave aparece e o evento se desenrola).
+function snapshotEstado() {
+  const s = {
+    estado, pausado, tempo, vel: $('vel').value,
+    unidades: unidades.map(u => ({ ...u })),
+    areas: areas.map(a => ({ ...a })),
+    base: { x:BASE.x, y:BASE.y },
+    twrRespostas: twrRespostas.map(r => ({ ...r }))
+  };
+  if (estado !== 'preparo' && inc) {
+    s.caso = selTipo.value;
+    s.inc = { ...inc, focos: inc.focos.map(f => ({ lx:f.lx, ly:f.ly, nome:f.nome })) };
+    s.pessoas = pessoas.map(q => ({ porta:q.porta, t:q.t }));
+    s.portas = portas.map(p => ({ id:p.id, armada:p.armada }));
+    s.usou = [...usou];
+  }
+  return s;
+}
+// Atendente: aplica o estado recebido (a seleção e o modo de cada tela continuam locais)
+function aplicarEstado(s) {
+  if (!s) return;
+  if (s.caso && CASOS[s.caso]) { selTipo.value = s.caso; caso = CASOS[s.caso]; }
+  if (s.vel) $('vel').value = s.vel;
+  estado = s.estado || 'preparo';
+  pausado = !!s.pausado;
+  tempo = s.tempo || 0;
+  trajeto = [];
+  inc = s.inc ? { ...s.inc } : null;
+  pessoas = s.pessoas || [];
+  (s.portas || []).forEach(sp => { const p = portas.find(x => x.id === sp.id); if (p) p.armada = sp.armada; });
+  unidades = s.unidades || [];
+  areas = s.areas || [];
+  twrRespostas = s.twrRespostas || [];
+  usou = new Set(s.usou || []);
+  if (s.base) aplicarBase(s.base);
+}
+function publicar() {
+  if (papel !== 'apresentador' || !rede) return;
+  const s = snapshotEstado();
+  const j = JSON.stringify(s);
+  if (j === ultimoEnvio) return;
+  ultimoEnvio = j;
+  Promise.resolve(estadoDoc().set(s))
+    .catch(() => { $('msg').textContent = 'Falha ao publicar o cenário. Verifique se você é o dono do artefato.'; });
+}
+// Apresentador: aplica os comandos enviados pelos atendentes
+function processarComandos(snap) {
+  const docs = Array.isArray(snap) ? snap : (snap && snap.docs) ? snap.docs : [];
+  docs.forEach(d => {
+    const id = d && d.id;
+    if (!id || processados.has(id)) return;
+    processados.add(id);
+    const c = dadosDe(d);
+    if (c && c.tipo) aplicarComando(c, false);
+    try { Promise.resolve(comandosCol().doc(id).delete()).catch(() => {}); } catch (e) {}
+  });
+}
+function iniciarRede(p, db, codigo) {
+  rede = db; papel = p; sala = codigo;
+  $('codSala').textContent = codigo;
+  aplicarPapelUI();
+  if (p === 'apresentador') {
+    $('copiarSala').style.display = '';
+    comandosCol().onSnapshot(processarComandos);
+    setInterval(publicar, 400);
+    publicar();
+  } else {
+    estadoDoc().onSnapshot(snap => {
+      const d = dadosDe(snap);
+      if (d && d.estado) aplicarEstado(d);
+      else $('msg').textContent = 'A sala ' + codigo + ' ainda não foi aberta pelo apresentador. Aguarde.';
+    });
+  }
+}
+function fecharEntrada() { $('entrada').style.display = 'none'; }
+async function entrarSala(p) {
+  const msgE = $('entradaMsg');
+  if (p === 'local') { papel = 'local'; aplicarPapelUI(); fecharEntrada(); return; }
+  let codigo = p === 'apresentador' ? gerarCodigo() : $('codEntrada').value.trim().toUpperCase();
+  if (p === 'atendente' && !CODIGO_VALIDO.test(codigo)) {
+    msgE.textContent = 'Digite o código da sala com 6 caracteres (letras e números, como informado pelo apresentador).';
+    return;
+  }
+  msgE.textContent = 'Conectando ao espaço compartilhado...';
+  let db = null;
+  try {
+    const c = window.claude;
+    db = c && c.use ? await Promise.race([c.use('db'), new Promise(r => setTimeout(() => r(null), 10000))]) : null;
+  } catch (e) { db = null; }
+  if (!db) {
+    msgE.textContent = 'Sincronização indisponível neste visualizador. Abra o endereço do artefato no claude.ai ou use o modo local.';
+    return;
+  }
+  iniciarRede(p, db, codigo);
+  if (p === 'apresentador') {
+    const url = location.href.split('#')[0] + '#sala=' + codigo;
+    $('msg').textContent = 'Sala criada: ' + codigo + '. Os atendentes entram com este código ou com o link: ' + url;
+  }
+  fecharEntrada();
+}
+$('copiarSala').onclick = () => {
+  if (!sala) return;
+  const url = location.href.split('#')[0] + '#sala=' + sala;
+  $('msg').textContent = 'Link da sala ' + sala + ': ' + url + ' (o atendente também pode digitar o código).';
+};
+$('modoAp').onclick = () => entrarSala('apresentador');
+$('modoAt').onclick = () => entrarSala('atendente');
+$('modoLocal').onclick = () => entrarSala('local');
+// Link com o código já preenchido (#sala=CODIGO)
+(function () {
+  const m = location.hash.match(/sala=([A-Za-z0-9]{6})/);
+  if (m) { $('codEntrada').value = m[1].toUpperCase(); $('entradaMsg').textContent = 'Código da sala preenchido. Clique em "Entrar como atendente".'; }
+})();
+
+// ---------- Laço principal ----------
+atualizarPlace();
+let last = performance.now();
+function loop(t) {
+  const dt = Math.min(0.1, (t - last) / 1000);
+  last = t;
+  if (papel !== 'atendente') tick(dt * Number($('vel').value));
+  desenhar();
+  atualizarUI();
+  requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>
