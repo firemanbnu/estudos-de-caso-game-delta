@@ -885,10 +885,9 @@ let AE = { sx:1, sy:1, spec:null }, aeroKey = '';
 // Imagens (vista de cima, nariz para a direita) usadas no lugar do desenho genérico.
 // halfW: meia largura da fuselagem (m); motor: posição do motor direito em metros (x para o nariz, y para a lateral), usada para o fogo no motor.
 const AERO_IMG = {
-  a320: { src:'a320-topo.png', halfW:1.76, motor:{ x:4.96, y:6.08 } },
-  a321: { src:'a321-topo.png', halfW:1.90, motor:{ x:4.45, y:5.99 } },
-  b738: { src:'b738-topo.png', halfW:1.68, motor:{ x:4.15, y:5.0 } },
-  e195: { src:'e195-topo.png', halfW:1.43, motor:{ x:4.57, y:4.15 } }
+  a320: { src:'a320-topo.png', halfW:1.6, motor:{ x:2.6, y:5.4 } },
+  a321: { src:'a321-topo.png', halfW:2.0, motor:{ x:4.7, y:6.3 } },
+  b738: { src:'b738-topo.png', halfW:1.75, motor:{ x:3.9, y:4.8 } }
 };
 for (const id in AERO_IMG) {
   const o = AERO_IMG[id]; o.img = new Image();
