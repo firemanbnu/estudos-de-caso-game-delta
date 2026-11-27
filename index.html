@@ -248,15 +248,15 @@ const TIPOS = {
   CMD: { nome:'PCM', ab:'PCM', cor:'#7e22ce', cab:'#581c87', vel:300, acoes:['parado'] }
 };
 const AREAS = {
-  ACV: { nome:'Área de concentração de vítimas', sigla:'ACV', cor:'#ef4444', r:45 },
-  TRI: { nome:'Área de triagem',                 sigla:'TRI', cor:'#22c55e', r:66 },
-  TRA: { nome:'Área de transporte',              sigla:'TRA', cor:'#374151', r:42 },
+  ACV: { nome:'Área de concentração de vítimas', sigla:'ACV', cor:'#ef4444', r:36 },
+  TRI: { nome:'Área de triagem',                 sigla:'TRI', cor:'#22c55e', r:53 },
+  TRA: { nome:'Área de transporte',              sigla:'TRA', cor:'#374151', r:34 },
   CC:  { nome:'Concentração de viaturas',        sigla:'CC',  cor:'#60a5fa', r:45 },
   RE:  { nome:'Área de reabastecimento',         sigla:'RE',  cor:'#f59e0b', r:45 }
 };
 const AREA_R = 45;
 // Triagem: três retângulos lado a lado (verde, amarelo, vermelho), deslocamentos em relação ao centro da área
-const TRI_RET = [{ dx:-42, cor:'#22c55e' }, { dx:0, cor:'#facc15' }, { dx:42, cor:'#ef4444' }];
+const TRI_RET = [{ dx:-34, cor:'#22c55e' }, { dx:0, cor:'#facc15' }, { dx:34, cor:'#ef4444' }];
 const RANGE = 100;      // alcance de atuação em relação à aeronave (unidades do mapa)
 const ACAO_ROTULO = {
   parado:'Parado', combate:'Apagar fogo', espuma:'Espuma sobre combustível', resgate:'Resgatar passageiros',
@@ -381,8 +381,8 @@ function unidadeEm(p) {
 }
 // Formas: triagem e transporte são retângulos; concentração e demais áreas são círculos
 function dentroArea(a, p) {
-  if (a.tipo === 'TRI') return Math.abs(p.x - a.x) <= 64 && Math.abs(p.y - a.y) <= 18;
-  if (a.tipo === 'TRA') return Math.abs(p.x - a.x) <= 35 && Math.abs(p.y - a.y) <= 20;
+  if (a.tipo === 'TRI') return Math.abs(p.x - a.x) <= 52 && Math.abs(p.y - a.y) <= 13;
+  if (a.tipo === 'TRA') return Math.abs(p.x - a.x) <= 28 && Math.abs(p.y - a.y) <= 16;
   return DIST(a, p) <= a.r;
 }
 function areaEm(p) { return areas.find(a => dentroArea(a, p)) || null; }
@@ -572,7 +572,7 @@ function desenharAviao(x, y, h) {
   const asa = s => { ctx.beginPath(); ctx.moveTo(18, 7*s); ctx.lineTo(-14, 62*s); ctx.lineTo(-27, 62*s); ctx.lineTo(-12, 7*s); ctx.closePath(); };
   const estab = s => { ctx.beginPath(); ctx.moveTo(-44, 5*s); ctx.lineTo(-56, 26*s); ctx.lineTo(-64, 26*s); ctx.lineTo(-58, 5*s); ctx.closePath(); };
   ctx.save();
-  ctx.translate(x, y); ctx.rotate(h || 0);
+  ctx.translate(x, y); ctx.rotate(h || 0); ctx.scale(ESC_AERO, ESC_AERO);
   // sombra
   ctx.save(); ctx.translate(6, 8); ctx.globalAlpha *= 0.25; ctx.fillStyle = '#000';
   corpo(); ctx.fill(); asa(1); ctx.fill(); asa(-1); ctx.fill(); estab(1); ctx.fill(); estab(-1); ctx.fill();
@@ -652,8 +652,10 @@ function aeroAtual() {
   }
   return { x, y, h };
 }
+const ESC_AERO = 0.8; // aeronave 20% menor que antes
 function aeroParaMundo(lx, ly, a = aeroAtual()) {
   const c = Math.cos(a.h || 0), s = Math.sin(a.h || 0);
+  lx *= ESC_AERO; ly *= ESC_AERO;
   return { x: a.x + lx*c - ly*s, y: a.y + lx*s + ly*c };
 }
 function portaBloqueada(p) {
@@ -1000,13 +1002,13 @@ function desenhar() {
     const c = AREAS[a.tipo].cor, sel = a.id === selAreaId;
     if (a.tipo === 'TRI') {
       for (const q of TRI_RET) {
-        const x = a.x + q.dx - 20, y = a.y - 14;
-        ctx.globalAlpha = 0.5; ctx.fillStyle = q.cor; ctx.fillRect(x, y, 40, 28); ctx.globalAlpha = 1;
-        ctx.strokeStyle = sel ? '#fff' : q.cor; ctx.lineWidth = (sel ? 2.5 : 1.5)*k; ctx.strokeRect(x, y, 40, 28);
+        const x = a.x + q.dx - 16, y = a.y - 11.2;
+        ctx.globalAlpha = 0.5; ctx.fillStyle = q.cor; ctx.fillRect(x, y, 32, 22.4); ctx.globalAlpha = 1;
+        ctx.strokeStyle = sel ? '#fff' : q.cor; ctx.lineWidth = (sel ? 2.5 : 1.5)*k; ctx.strokeRect(x, y, 32, 22.4);
       }
     } else if (a.tipo === 'TRA') {
-      ctx.globalAlpha = 0.85; ctx.fillStyle = c; ctx.fillRect(a.x - 35, a.y - 20, 70, 40); ctx.globalAlpha = 1;
-      ctx.strokeStyle = sel ? '#fff' : '#9ca3af'; ctx.lineWidth = (sel ? 2.5 : 1.5)*k; ctx.strokeRect(a.x - 35, a.y - 20, 70, 40);
+      ctx.globalAlpha = 0.85; ctx.fillStyle = c; ctx.fillRect(a.x - 28, a.y - 16, 56, 32); ctx.globalAlpha = 1;
+      ctx.strokeStyle = sel ? '#fff' : '#9ca3af'; ctx.lineWidth = (sel ? 2.5 : 1.5)*k; ctx.strokeRect(a.x - 28, a.y - 16, 56, 32);
     } else {
       ctx.globalAlpha = 0.18; ctx.fillStyle = c;
       ctx.beginPath(); ctx.arc(a.x, a.y, a.r, 0, Math.PI*2); ctx.fill();
