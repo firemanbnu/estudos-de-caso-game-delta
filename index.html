@@ -122,9 +122,10 @@
   <div class="linha" id="barraCmd">
     <span class="rot">Comando</span>
     <span id="barraNome"></span>
-    <button data-acao="combate">Combater incêndio</button>
+    <button data-acao="combate">Apagar fogo</button>
     <button data-acao="resgate">Resgatar passageiros</button>
     <button data-acao="atendimento">Atendimento médico</button>
+    <button data-acao="espuma" class="sec">Espuma no combustível</button>
     <button data-acao="parado" class="sec">Parar</button>
     <button data-acao="base" class="sec">Retornar à base</button>
     <select id="barraArea" style="display:none"></select>
@@ -159,6 +160,15 @@
     <div class="linha"><label>Passageiros a bordo <input id="fPax" type="number" min="0" placeholder="padrão do caso"></label></div>
     <div class="linha" style="width:100%"><label style="width:100%">Combustível a bordo<br><input id="fComb" placeholder="Ex.: 6.500 kg" style="width:100%"></label></div>
     <div class="linha"><button id="start">Iniciar cenário</button><button id="end" class="sec">Encerrar caso</button></div>
+  </section>
+
+  <section id="secOcorr" class="so-admin">
+    <h2>Ocorrências</h2>
+    <div class="linha"><span id="fogoInfo" style="flex:1;font-size:12px">Fogo na aeronave</span>
+      <button data-fi="diminuir" class="sec">−</button><button data-fi="aumentar" class="sec">+</button><button data-fi="apagar">Apagar</button></div>
+    <div class="linha"><button id="addFogo" class="sec">+ Fogo no solo</button><button id="addComb" class="sec">+ Vazamento</button></div>
+    <p class="peq">Clique no mapa para posicionar. O fogo no solo pode ser propagado para outras áreas. O vazamento pode ser coberto com espuma ou acendido.</p>
+    <div id="ocList"></div>
   </section>
 
   <section id="secTwrAdm" class="so-admin">
@@ -230,7 +240,7 @@ const AREAS = {
 const AREA_R = 45;
 const RANGE = 100;      // alcance de atuação em relação à aeronave (unidades do mapa)
 const ACAO_ROTULO = {
-  parado:'Parado', combate:'Combater incêndio', resgate:'Resgatar passageiros',
+  parado:'Parado', combate:'Apagar fogo', espuma:'Espuma sobre combustível', resgate:'Resgatar passageiros',
   atendimento:'Atendimento médico', base:'Indo reabastecer', reab:'Reabastecendo'
 };
 const CASOS = {
@@ -345,7 +355,9 @@ function criarArea(tipo, x, y) {
 const areaPorId = id => areas.find(a => a.id === id) || null;
 const unidadePorId = id => unidades.find(u => u.id === id) || null;
 function unidadeEm(p) {
-  for (let i = unidades.length - 1; i >= 0; i--) if (DIST(unidades[i], p) <= 22) return unidades[i];
+  // tolerância em pixels de tela, para tocar a viatura com o dedo mesmo com o mapa afastado
+  const tol = Math.max(22, 28 / cam.s);
+  for (let i = unidades.length - 1; i >= 0; i--) if (DIST(unidades[i], p) <= tol) return unidades[i];
   return null;
 }
 function areaEm(p) { return areas.find(a => DIST(a, p) <= a.r) || null; }
@@ -372,6 +384,7 @@ function enviarArea(u, a) {
 function statusDe(u) {
   const a = areaPorId(u.area);
   if (u.dest) return u.acao === 'base' ? 'Indo reabastecer' : (a ? 'Indo para ' + a.id : 'Em deslocamento');
+  if (u.acao === 'espuma' && !u.dest) return 'Aplicando espuma';
   if (u.acao === 'reab') return 'Reabastecendo';
   if (u.acao === 'parado') return a ? 'Na área ' + a.id : 'Parado';
   if (!inc || estado !== 'andamento') return a ? 'Na área ' + a.id : 'Aguardando início do caso';
@@ -447,6 +460,7 @@ function tick(dt) {
   const ativo = estado === 'andamento' && inc;
   if (ativo) tempo += dt;
   let combate = false;
+  const alvosTick = ativo ? alvosFogo() : [];
   if (ativo && inc.movendo) moverAeronave(dt);
   // evacuação: só com a aeronave parada e porta armada e livre de fogo
   if (ativo && !inc.movendo) {
@@ -472,11 +486,19 @@ function tick(dt) {
       if (u.reab <= 0) { u.acao = 'parado'; u.tanque = TIPOS[u.tipo].tanque || 0; }
       continue;
     }
+    // espuma: a viatura chega ao combustível e cobre a área; a espuma impede a ignição
+    if (u.acao === 'espuma') {
+      const o = ocorrencias.find(x => x.id === u.alvoOc && x.tipo === 'comb');
+      if (!o) u.acao = 'parado';
+      else if (DIST(u, o) <= o.r + 12) { o.espuma = true; u.acao = 'parado'; u.alvoOc = null; }
+      continue;
+    }
     if (!ativo) continue;
     const emCena = DIST(u, inc) <= RANGE;
 
-    if (u.acao === 'combate' && emCena && inc.fogo > 0 && u.tanque > 0) {
-      inc.fogo -= TIPOS[u.tipo].taxa * dt;
+    // Apagar fogo: a água é lançada sobre o fogo, mas só o administrador decide quando ele se extingue
+    const emFogo = alvosTick.some(q => Math.hypot(q.x - u.x, q.y - u.y) <= RANGE + q.raio);
+    if (u.acao === 'combate' && emFogo && u.tanque > 0) {
       inc.fumaca -= 3 * dt;
       u.tanque -= dt;
       usou.add(u.id); combate = true;
@@ -493,7 +515,8 @@ function tick(dt) {
   }
 
   if (ativo) {
-    if (!combate) inc.fogo += caso.taxaFogo * dt;
+    if (!inc.apagadoAdm) inc.fogo += caso.taxaFogo * dt;
+    for (const o of ocorrencias) if (o.tipo === 'fogo' && o.propaga) { o.r = Math.min(90, o.r + 1.5 * dt); o.int = Math.min(100, o.int + 0.5 * dt); }
     inc.fumaca += caso.taxaFumaca * dt;
     if (inc.fogo <= 0) inc.fumaca -= 2 * dt;
     inc.fogo = clamp(inc.fogo, 0, 100);
@@ -649,15 +672,17 @@ function desenharFumaca() {
 }
 // Jato d'água das viaturas que estão combatendo
 function desenharJatos() {
-  if (!inc || estado !== 'andamento' || inc.fogo <= 0 || !inc.focos || !inc.focos.length) return;
+  if (estado !== 'andamento') return;
+  const alvos = alvosFogo(); if (!alvos.length) return;
   const t = performance.now() / 1000, k = 1/cam.s;
   for (const u of unidades) {
-    if (u.acao !== 'combate' || u.tanque <= 0 || DIST(u, inc) > RANGE) continue;
+    if (u.acao !== 'combate' || u.tanque <= 0) continue;
     let alvo = null, dmin = Infinity;
-    for (const f of inc.focos) {
-      const q = aeroParaMundo(f.lx, f.ly), d = Math.hypot(q.x - u.x, q.y - u.y);
+    for (const q of alvos) {
+      const d = Math.hypot(q.x - u.x, q.y - u.y);
       if (d < dmin) { dmin = d; alvo = q; }
     }
+    if (!alvo || dmin > RANGE + alvo.raio) continue;
     ctx.strokeStyle = 'rgba(186,230,253,0.75)'; ctx.lineWidth = 2.2*k;
     ctx.setLineDash([3*k, 4*k]); ctx.lineDashOffset = -t * 60 * k;
     ctx.beginPath(); ctx.moveTo(u.x, u.y); ctx.lineTo(alvo.x, alvo.y); ctx.stroke();
@@ -666,6 +691,18 @@ function desenharJatos() {
 }
 // Comando de ação: se há caso em andamento, a viatura já se posiciona no alcance da aeronave
 function comandarAcao(u, act) {
+  if (act === 'combate') {
+    // Apagar fogo: a viatura vai ao foco mais próximo (aeronave ou solo) e lança água sobre ele
+    const alvos = alvosFogo();
+    if (alvos.length) {
+      let q = alvos[0], dmin = Infinity;
+      for (const a of alvos) { const d = Math.hypot(a.x - u.x, a.y - u.y); if (d < dmin) { dmin = d; q = a; } }
+      const ang = Math.atan2(u.y - q.y, u.x - q.x);
+      executar({ tipo:'ataque', id:u.id, acao:'combate', x: q.x + Math.cos(ang)*q.raio, y: q.y + Math.sin(ang)*q.raio });
+      $('msg').textContent = u.id + ': ' + ACAO_ROTULO.combate + '.';
+      return;
+    }
+  }
   if (inc && estado === 'andamento') {
     const ang = Math.atan2(u.y - inc.y, u.x - inc.x);
     executar({ tipo:'ataque', id:u.id, acao:act, x: inc.x + Math.cos(ang)*RANGE*0.7, y: inc.y + Math.sin(ang)*RANGE*0.7 });
@@ -732,6 +769,90 @@ function atualizarPortas() {
     $('pbt' + i).className = p.armada ? 'ativo' : 'sec';
   });
 }
+
+// ---------- Ocorrências: fogo no solo, vazamento de combustível e espuma ----------
+// Tudo isso é programado pelo administrador. O atendente só vê depois que o cenário começa.
+let ocorrencias = [];   // { id, tipo:'fogo'|'comb', x, y, r, int, propaga } | { id, tipo:'comb', x, y, r, espuma }
+let ocSeq = 0;
+let ocKey = '';
+function criarOcorrencia(kind, x, y) {
+  ocSeq++;
+  if (kind === 'fogo') return { id:'F' + ocSeq, tipo:'fogo', x, y, r:26, int:60, propaga:false };
+  return { id:'C' + ocSeq, tipo:'comb', x, y, r:26, espuma:false };
+}
+// Focos que a água pode atingir: a aeronave (se estiver queimando) e os focos no solo
+function alvosFogo() {
+  const L = [];
+  if (inc && inc.fogo > 0 && inc.focos) for (const f of inc.focos) { const q = aeroParaMundo(f.lx, f.ly); L.push({ x:q.x, y:q.y, raio:RANGE*0.7 }); }
+  for (const o of ocorrencias) if (o.tipo === 'fogo' && o.int > 0) L.push({ x:o.x, y:o.y, raio:o.r*0.7 + 8 });
+  return L;
+}
+function espumar(u) {
+  const combs = ocorrencias.filter(o => o.tipo === 'comb' && !o.espuma);
+  if (!combs.length) { $('msg').textContent = 'Não há combustível sem espuma para cobrir.'; return; }
+  let o = combs[0], dmin = Infinity;
+  for (const c of combs) { const d = DIST(c, u); if (d < dmin) { dmin = d; o = c; } }
+  executar({ tipo:'espuma', id:u.id, ocId:o.id });
+  $('msg').textContent = u.id + ': espuma sobre o combustível ' + o.id + '.';
+}
+function desenharOcorrencias() {
+  const t = performance.now() / 1000, k = 1/cam.s;
+  for (const o of ocorrencias) {
+    if (o.tipo === 'comb') {
+      ctx.fillStyle = 'rgba(17,24,39,0.6)'; ctx.beginPath(); ctx.arc(o.x, o.y, o.r, 0, Math.PI*2); ctx.fill();
+      ctx.strokeStyle = 'rgba(250,204,21,0.8)'; ctx.lineWidth = 1.5*k; ctx.stroke();
+      if (o.espuma) {
+        ctx.fillStyle = 'rgba(255,255,255,0.85)';
+        for (let i = 0; i < 9; i++) {
+          const a = i*0.7 + t*0.3, rr = o.r*(0.25 + 0.5*((i % 3)/2));
+          ctx.beginPath(); ctx.arc(o.x + Math.cos(a)*rr, o.y + Math.sin(a)*rr, o.r*0.22, 0, Math.PI*2); ctx.fill();
+        }
+      }
+      ctx.font = `bold ${9*k}px sans-serif`; ctx.lineWidth = 3*k; ctx.strokeStyle = 'rgba(0,0,0,0.8)'; ctx.fillStyle = '#fff';
+      const rot = o.id + (o.espuma ? ' · espuma' : ' · combustível');
+      ctx.strokeText(rot, o.x - o.r, o.y - o.r - 4*k); ctx.fillText(rot, o.x - o.r, o.y - o.r - 4*k);
+    } else {
+      const base = 3 + o.int*0.08;
+      for (let i = 0; i < 7; i++) {
+        const a = i*0.9 + t*3, d = o.r*0.45*(0.5 + 0.5*Math.sin(t*6 + i));
+        ctx.fillStyle = i % 2 ? 'rgba(255,90,0,0.75)' : 'rgba(255,170,0,0.8)';
+        ctx.beginPath(); ctx.arc(o.x + Math.cos(a)*d, o.y + Math.sin(a)*d, base*(0.5 + 0.25*Math.sin(t*9 + i)), 0, Math.PI*2); ctx.fill();
+      }
+      ctx.font = `bold ${9*k}px sans-serif`; ctx.lineWidth = 3*k; ctx.strokeStyle = 'rgba(0,0,0,0.8)'; ctx.fillStyle = '#fff';
+      const rot = o.id + ' · ' + Math.round(o.int) + '%' + (o.propaga ? ' · propagando' : '');
+      ctx.strokeText(rot, o.x - o.r, o.y - o.r - 4*k); ctx.fillText(rot, o.x - o.r, o.y - o.r - 4*k);
+    }
+  }
+}
+function btnOc(id, acao, rotulo, cls, dis) {
+  return '<button data-oc="' + id + '" data-acao="' + acao + '" class="' + (cls || '') + '"' + (dis ? ' disabled' : '') + '>' + rotulo + '</button>';
+}
+function atualizarOcorr() {
+  $('fogoInfo').textContent = inc ? 'Fogo na aeronave: ' + Math.round(inc.fogo) + '%' : 'Fogo na aeronave: aguardando início';
+  const key = ocorrencias.map(o => [o.id, Math.round(o.int), Math.round(o.r), o.espuma, o.propaga].join(':')).join(',');
+  if (key === ocKey) return;
+  ocKey = key;
+  const box = $('ocList'); box.innerHTML = '';
+  if (!ocorrencias.length) { box.innerHTML = '<p class="peq">Nenhuma ocorrência no solo.</p>'; return; }
+  ocorrencias.forEach(o => {
+    const d = document.createElement('div'); d.className = 'linha';
+    if (o.tipo === 'fogo') {
+      d.innerHTML = '<span style="flex:1;font-size:12px">' + o.id + ' · fogo ' + Math.round(o.int) + '%' + (o.propaga ? ' · propagando' : '') + '</span>' +
+        btnOc(o.id, 'diminuir', '−', 'sec') + btnOc(o.id, 'aumentar', '+', 'sec') +
+        btnOc(o.id, 'propagar', o.propaga ? 'Parar' : 'Propagar', 'sec') + btnOc(o.id, 'apagar', 'Apagar', '');
+    } else {
+      d.innerHTML = '<span style="flex:1;font-size:12px">' + o.id + ' · combustível' + (o.espuma ? ' · com espuma' : '') + '</span>' +
+        btnOc(o.id, 'acender', 'Acender', '', o.espuma) + btnOc(o.id, 'remover', 'Remover', 'sec');
+    }
+    box.appendChild(d);
+  });
+}
+$('ocList').addEventListener('click', e => {
+  const b = e.target.closest('[data-oc]'); if (b) executar({ tipo:'oc', acao:b.dataset.acao, id:b.dataset.oc });
+});
+document.querySelectorAll('[data-fi]').forEach(b => b.onclick = () => executar({ tipo:'fogoInc', acao:b.dataset.fi }));
+$('addFogo').onclick = () => { placing = 'OC_FOGO'; atualizarPlace(); };
+$('addComb').onclick = () => { placing = 'OC_COMB'; atualizarPlace(); };
 
 // ---------- Desenho ----------
 function desenharVeiculo(u) {
@@ -821,6 +942,8 @@ function desenhar() {
   ctx.fillStyle = '#fff'; ctx.strokeStyle = 'rgba(0,0,0,0.75)'; ctx.lineWidth = 3*k;
   txt('SESCINC', BASE.x - 30, BASE.y + 24);
 
+  desenharOcorrencias();
+
   // aeronave
   if (inc) {
     ctx.setLineDash([6*k, 5*k]); ctx.strokeStyle = 'rgba(255,255,255,0.3)'; ctx.lineWidth = k;
@@ -869,7 +992,8 @@ cv.addEventListener('mousedown', e => {
   const p = toWorld(e.clientX, e.clientY);
   if (modoTrajeto) { trajeto.push({ x:p.x, y:p.y }); return; }
   if (placing) {
-    executar({ tipo:'add', item:placing, x:p.x, y:p.y });
+    if (placing === 'OC_FOGO' || placing === 'OC_COMB') executar({ tipo:'oc', acao:'criar', kind: placing === 'OC_FOGO' ? 'fogo' : 'comb', x:p.x, y:p.y });
+    else executar({ tipo:'add', item:placing, x:p.x, y:p.y });
     placing = null; atualizarPlace();
     return;
   }
@@ -887,10 +1011,11 @@ window.addEventListener('mousemove', e => {
   const p = toWorld(e.clientX, e.clientY);
   if (!drag.moved && Math.hypot(p.x - drag.x0, p.y - drag.y0) * cam.s > 4) drag.moved = true;
   drag.px = p.x; drag.py = p.y;
-  if (drag.moved && papel !== 'atendente') {
+  if (drag.moved) {
+    // a viatura acompanha o dedo ou o mouse; o atendente envia a posição final ao soltar
     const u = drag.u;
-    u.x = p.x; u.y = p.y; u.dest = null; u.area = null; u.prog = 0;
-    if (u.acao === 'base') u.acao = 'parado';
+    u.x = p.x; u.y = p.y;
+    if (papel !== 'atendente') { u.dest = null; u.area = null; u.prog = 0; if (u.acao === 'base') u.acao = 'parado'; }
   }
 });
 window.addEventListener('mouseup', () => {
@@ -984,7 +1109,7 @@ document.addEventListener('keydown', e => {
 
 // ---------- Painel ----------
 function atualizarPlace() {
-  const nomes = { ...Object.fromEntries(Object.entries(TIPOS).map(([k,v]) => [k, v.nome])), ...Object.fromEntries(Object.entries(AREAS).map(([k,v]) => [k, v.nome])) };
+  const nomes = { ...Object.fromEntries(Object.entries(TIPOS).map(([k,v]) => [k, v.nome])), ...Object.fromEntries(Object.entries(AREAS).map(([k,v]) => [k, v.nome])), OC_FOGO:'fogo no solo', OC_COMB:'vazamento de combustível' };
   $('placeTxt').textContent = placing
     ? 'Clique no mapa para posicionar: ' + nomes[placing] + '. Esc cancela.'
     : '';
@@ -997,6 +1122,7 @@ document.querySelectorAll('#barraCmd [data-acao]').forEach(b => b.onclick = () =
   const act = b.dataset.acao;
   if (act === 'base') executar({ tipo:'base', id:u.id });
   else if (act === 'parado') executar({ tipo:'acao', id:u.id, acao:'parado' });
+  else if (act === 'espuma') espumar(u);
   else comandarAcao(u, act);
 });
 $('barraEnviar').onclick = () => {
@@ -1012,7 +1138,7 @@ $('barraRem').onclick = () => {
 function atualizarBarra() {
   const u = unidadePorId(selId), a = areaPorId(selAreaId);
   $('barra').classList.toggle('vazia', !u && !a && !placing);
-  const key = (u ? 'u' + u.id + '|' + u.acao + '|' + (u.area || '') : a ? 'a' + a.id : 'n') + '|' + estado + '|' + areas.map(x => x.id).join(',');
+  const key = (u ? 'u' + u.id + '|' + u.acao + '|' + (u.area || '') : a ? 'a' + a.id : 'n') + '|' + estado + '|' + areas.map(x => x.id).join(',') + '|' + ocorrencias.filter(o => o.tipo === 'comb' && !o.espuma).length;
   if (key === barraKey) return;
   barraKey = key;
   if (u) $('barraNome').textContent = u.id + ' · ' + TIPOS[u.tipo].nome;
@@ -1020,7 +1146,8 @@ function atualizarBarra() {
   else $('barraNome').textContent = 'Nenhuma seleção';
   document.querySelectorAll('#barraCmd [data-acao]').forEach(b => {
     const act = b.dataset.acao;
-    const mostra = u ? (act === 'base' ? !!TIPOS[u.tipo].tanque : TIPOS[u.tipo].acoes.includes(act)) : false;
+    const temComb = ocorrencias.some(o => o.tipo === 'comb' && !o.espuma);
+    const mostra = u ? (act === 'base' ? !!TIPOS[u.tipo].tanque : act === 'espuma' ? ((u.tipo === 'AB' || u.tipo === 'AP') && temComb) : TIPOS[u.tipo].acoes.includes(act)) : false;
     b.style.display = mostra ? '' : 'none';
     b.className = (u && u.acao === act) ? 'ativo' : (act === 'parado' || act === 'base' ? 'sec' : '');
   });
@@ -1176,6 +1303,7 @@ function atualizarUI() {
   atualizarSel();
   atualizarBarra();
   atualizarTwr();
+  atualizarOcorr();
 }
 
 // ---------- TWR (controle) ----------
@@ -1333,6 +1461,37 @@ function aplicarComando(c, local) {
       }
       break;
     }
+    case 'fogoInc':
+      // fogo da aeronave: o administrador aumenta, diminui ou apaga
+      if (!inc) break;
+      if (c.acao === 'diminuir') inc.fogo = Math.max(0, inc.fogo - 20);
+      else if (c.acao === 'aumentar') { inc.fogo = Math.min(100, inc.fogo + 20); inc.apagadoAdm = false; }
+      else if (c.acao === 'apagar') { inc.fogo = 0; inc.apagadoAdm = true; }
+      break;
+    case 'oc': {
+      const o = c.id ? ocorrencias.find(x => x.id === c.id) : null;
+      if (c.acao === 'criar') ocorrencias.push(criarOcorrencia(c.kind, c.x, c.y));
+      else if (o) {
+        if (c.acao === 'diminuir' && o.tipo === 'fogo') o.int = Math.max(0, o.int - 20);
+        else if (c.acao === 'aumentar' && o.tipo === 'fogo') o.int = Math.min(100, o.int + 20);
+        else if (c.acao === 'apagar' && o.tipo === 'fogo') o.int = 0;
+        else if (c.acao === 'propagar' && o.tipo === 'fogo') o.propaga = !o.propaga;
+        else if (c.acao === 'remover') ocorrencias = ocorrencias.filter(x => x !== o);
+        else if (c.acao === 'acender' && o.tipo === 'comb') {
+          if (o.espuma) { if (local) $('msg').textContent = 'A espuma impede a ignição do combustível.'; }
+          else ocorrencias = ocorrencias.map(x => x === o ? { id:o.id, tipo:'fogo', x:o.x, y:o.y, r:o.r, int:60, propaga:false } : x);
+        }
+      }
+      ocorrencias = ocorrencias.filter(x => !(x.tipo === 'fogo' && x.int <= 0));
+      break;
+    }
+    case 'espuma':
+      // a viatura vai até o combustível e cobre a área com espuma
+      if (u) {
+        const o = ocorrencias.find(x => x.id === c.ocId && x.tipo === 'comb');
+        if (o) { u.alvoOc = o.id; u.dest = { x:o.x, y:o.y }; u.area = null; u.acao = 'espuma'; u.prog = 0; }
+      }
+      break;
     case 'pedido':
       if (c.rid && !twrPedidos.some(p => p.id === c.rid)) twrPedidos.push({ id:c.rid, item:c.item, status:'pendente' });
       break;
@@ -1362,6 +1521,7 @@ function snapshotEstado() {
     s.pessoas = pessoas.map(q => ({ porta:q.porta, t:q.t }));
     s.portas = portas.map(p => ({ id:p.id, armada:p.armada }));
     s.usou = [...usou];
+    s.ocorrencias = ocorrencias.map(o => ({ ...o }));
   }
   return s;
 }
@@ -1380,6 +1540,7 @@ function aplicarEstado(s) {
   unidades = s.unidades || [];
   areas = s.areas || [];
   twrRespostas = s.twrRespostas || [];
+  ocorrencias = s.ocorrencias || [];
   usou = new Set(s.usou || []);
   if (s.base) aplicarBase(s.base);
 }
