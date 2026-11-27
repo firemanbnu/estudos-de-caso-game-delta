@@ -86,6 +86,7 @@
 <div id="hud">
   <span class="stat essencial">Tempo <b id="time">00:00</b></span>
   <span class="stat essencial">Fogo <b id="fogo">--</b></span>
+  <span class="stat essencial" id="sinalBox" style="display:none">Sinal <b id="sinal">--</b></span>
   <span class="stat">Fumaça <b id="fumaca">--</b></span>
   <span class="stat">A bordo <b id="pax">--</b></span>
   <span class="stat">Feridos <b id="feridos">--</b></span>
@@ -169,6 +170,18 @@
     <div class="linha"><button id="addFogo" class="sec">+ Fogo no solo</button><button id="addComb" class="sec">+ Vazamento</button></div>
     <p class="peq">Clique no mapa para posicionar. O fogo no solo pode ser propagado para outras áreas. O vazamento pode ser coberto com espuma ou acendido.</p>
     <div id="ocList"></div>
+  </section>
+
+  <section id="secFumaca" class="so-admin">
+    <h2>Fumaça e vento</h2>
+    <p id="fumInfo" class="peq">Aguardando início do caso</p>
+    <div class="linha"><span style="width:84px;font-size:12px">Densidade</span><button data-fum="densidade-" class="sec">−</button><button data-fum="densidade+" class="sec">+</button></div>
+    <div class="linha"><span style="width:84px;font-size:12px">Área</span><button data-fum="area-" class="sec">−</button><button data-fum="area+" class="sec">+</button></div>
+    <div class="linha"><span style="width:84px;font-size:12px">Vento sopra para</span>
+      <button data-vento="NO" class="sec">NO</button><button data-vento="N" class="sec">N</button><button data-vento="NE" class="sec">NE</button>
+      <button data-vento="O" class="sec">O</button><button data-vento="E" class="sec">E</button>
+      <button data-vento="SO" class="sec">SO</button><button data-vento="S" class="sec">S</button><button data-vento="SE" class="sec">SE</button>
+    </div>
   </section>
 
   <section id="secTwrAdm" class="so-admin">
@@ -403,7 +416,7 @@ function iniciarCaso() {
   if (trajeto.length) { x = trajeto[0].x; y = trajeto[0].y; }
   else { x = ZONA.x1 + Math.random()*(ZONA.x2 - ZONA.x1); y = ZONA.y1 + Math.random()*(ZONA.y2 - ZONA.y1); }
   const h0 = trajeto.length > 1 ? Math.atan2(trajeto[1].y - y, trajeto[1].x - x) : 0;
-  inc = { x, y, h:h0, pi:1, movendo: trajeto.length > 1, parou:false, fogo:caso.fogo, fumaca:caso.fumaca, pax:fichaCaso().pax, paxInicial:fichaCaso().pax, feridos:0, resgatados:0, atendidos:0, evacuados:0, dangerT:0 };
+  inc = { x, y, h:h0, pi:1, movendo: trajeto.length > 1, parou:false, fogo:caso.fogo, fumaca:caso.fumaca, pax:fichaCaso().pax, paxInicial:fichaCaso().pax, feridos:0, resgatados:0, atendidos:0, evacuados:0, dangerT:0, ventoDeg:-135, ventoNome:'NO', fumAreaK:1 };
   modoTrajeto = false;
   inc.focos = localizarFocos(desc, selTipo.value);
   pessoas = [];
@@ -654,19 +667,22 @@ function desenharFogo() {
     ctx.fillStyle = 'rgba(255,235,120,0.9)'; ctx.beginPath(); ctx.arc(p.x, p.y, base * 0.3, 0, Math.PI*2); ctx.fill();
   }
 }
-// Fumaça que sobe e se dispersa a partir do foco principal
+// Fumaça que sai do foco principal e é levada pelo vento. Densidade, área e vento são controlados pelo administrador.
 function desenharFumaca() {
   if (!inc || inc.fumaca <= 0) return;
   const t = performance.now() / 1000;
   const o = inc.focos && inc.focos.length ? inc.focos[0] : { lx:20, ly:0 };
   const o0 = aeroParaMundo(o.lx, o.ly);
-  const n = 3 + Math.floor(inc.fumaca / 25);
+  const K = inc.fumAreaK || 1;
+  const vr = (inc.ventoDeg ?? -135) * Math.PI / 180, vx = Math.cos(vr), vy = Math.sin(vr);
+  const n = Math.max(2, 3 + Math.floor(inc.fumaca / 25) + Math.round((K - 1) * 4));
   for (let i = 0; i < n; i++) {
     const fase = (t * 0.35 + i / n) % 1;
-    const x = o0.x - fase * 40 + Math.sin(i * 2) * 4, y = o0.y - fase * 30;
+    const d = fase * 60 * K;
+    const x = o0.x + vx * d + Math.sin(i * 2) * 4 * K, y = o0.y + vy * d + Math.cos(i * 2) * 3 * K;
     ctx.globalAlpha = (1 - fase) * Math.min(0.75, inc.fumaca / 100);
     ctx.fillStyle = '#d1d5db';
-    ctx.beginPath(); ctx.arc(x, y, 6 + fase * 22, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc(x, y, (6 + fase * 22) * K, 0, Math.PI*2); ctx.fill();
   }
   ctx.globalAlpha = 1;
 }
@@ -827,6 +843,15 @@ function desenharOcorrencias() {
 function btnOc(id, acao, rotulo, cls, dis) {
   return '<button data-oc="' + id + '" data-acao="' + acao + '" class="' + (cls || '') + '"' + (dis ? ' disabled' : '') + '>' + rotulo + '</button>';
 }
+// Direções do vento, em graus na tela (0 = leste, sentido horário)
+const VENTOS = { N:-90, NE:-45, E:0, SE:45, S:90, SO:135, O:180, NO:-135 };
+function atualizarFumaca() {
+  if (!inc) { $('fumInfo').textContent = 'Aguardando início do caso'; return; }
+  $('fumInfo').textContent = 'Densidade ' + Math.round(inc.fumaca) + '% · área ' + Math.round((inc.fumAreaK || 1) * 100) + '% · vento sopra para ' + (inc.ventoNome || 'NO');
+}
+document.querySelectorAll('[data-fum]').forEach(b => b.onclick = () => executar({ tipo:'fumaca', acao:b.dataset.fum }));
+document.querySelectorAll('[data-vento]').forEach(b => b.onclick = () => executar({ tipo:'fumaca', acao:'vento', valor:VENTOS[b.dataset.vento], nome:b.dataset.vento }));
+
 function atualizarOcorr() {
   $('fogoInfo').textContent = inc ? 'Fogo na aeronave: ' + Math.round(inc.fogo) + '%' : 'Fogo na aeronave: aguardando início';
   const key = ocorrencias.map(o => [o.id, Math.round(o.int), Math.round(o.r), o.espuma, o.propaga].join(':')).join(',');
@@ -1304,6 +1329,7 @@ function atualizarUI() {
   atualizarBarra();
   atualizarTwr();
   atualizarOcorr();
+  atualizarFumaca();
 }
 
 // ---------- TWR (controle) ----------
@@ -1492,6 +1518,15 @@ function aplicarComando(c, local) {
         if (o) { u.alvoOc = o.id; u.dest = { x:o.x, y:o.y }; u.area = null; u.acao = 'espuma'; u.prog = 0; }
       }
       break;
+    case 'fumaca':
+      // fumaça e vento: o administrador ajusta densidade, área e direção do vento
+      if (!inc) break;
+      if (c.acao === 'densidade+') inc.fumaca = Math.min(100, inc.fumaca + 15);
+      else if (c.acao === 'densidade-') inc.fumaca = Math.max(0, inc.fumaca - 15);
+      else if (c.acao === 'area+') inc.fumAreaK = Math.min(3, (inc.fumAreaK || 1) + 0.25);
+      else if (c.acao === 'area-') inc.fumAreaK = Math.max(0.5, (inc.fumAreaK || 1) - 0.25);
+      else if (c.acao === 'vento') { inc.ventoDeg = c.valor; inc.ventoNome = c.nome; }
+      break;
     case 'pedido':
       if (c.rid && !twrPedidos.some(p => p.id === c.rid)) twrPedidos.push({ id:c.rid, item:c.item, status:'pendente' });
       break;
@@ -1534,24 +1569,65 @@ function aplicarEstado(s) {
   pausado = !!s.pausado;
   tempo = s.tempo || 0;
   trajeto = [];
+  const incAnt = inc;
   inc = s.inc ? { ...s.inc } : null;
+  if (inc) {
+    inc.tx = inc.x; inc.ty = inc.y;
+    if (incAnt) { inc.x = incAnt.x; inc.y = incAnt.y; }
+  }
   pessoas = s.pessoas || [];
   (s.portas || []).forEach(sp => { const p = portas.find(x => x.id === sp.id); if (p) p.armada = sp.armada; });
-  unidades = s.unidades || [];
+  aplicarUnidades(s.unidades);
   areas = s.areas || [];
   twrRespostas = s.twrRespostas || [];
   ocorrencias = s.ocorrencias || [];
   usou = new Set(s.usou || []);
   if (s.base) aplicarBase(s.base);
 }
+// Uma gravação por vez: se a anterior ainda não terminou, espera a próxima rodada
+let publicando = false;
 function publicar() {
-  if (papel !== 'apresentador' || !rede) return;
+  if (papel !== 'apresentador' || !rede || publicando) return;
   const s = snapshotEstado();
   const j = JSON.stringify(s);
   if (j === ultimoEnvio) return;
+  publicando = true;
   ultimoEnvio = j;
-  Promise.resolve(estadoDoc().set(s))
-    .catch(() => { $('msg').textContent = 'Falha ao publicar o cenário. Verifique se você é o dono do artefato.'; });
+  Promise.resolve(estadoDoc().set(s)).then(
+    () => { publicando = false; },
+    () => { publicando = false; ultimoEnvio = ''; $('msg').textContent = 'Falha ao publicar o cenário. Verifique se você é o dono do artefato e se a sala existe.'; }
+  );
+}
+// Lê o estado do formato que o armazenamento devolver (documento com data(), campo data ou o próprio objeto)
+function extrairEstado(snap) {
+  const cands = [];
+  try {
+    if (snap) {
+      if (typeof snap.data === 'function') cands.push(snap.data());
+      cands.push(snap.data, snap.value, snap);
+      if (snap.doc) cands.push(typeof snap.doc.data === 'function' ? snap.doc.data() : snap.doc.data);
+    }
+  } catch (e) {}
+  return cands.find(c => c && typeof c === 'object' && c.estado !== undefined) || null;
+}
+// Atendente: guarda a posição anterior de cada viatura e avança suavemente até a nova posição recebida
+function aplicarUnidades(lista) {
+  const antigas = new Map(unidades.map(u => [u.id, u]));
+  unidades = (lista || []).map(n => {
+    const o = antigas.get(n.id);
+    const u = { ...n, tx:n.x, ty:n.y };
+    if (o) { u.x = o.x; u.y = o.y; }
+    return u;
+  });
+}
+let ultimoSinal = 0;
+function suavizarMovimento() {
+  if (papel !== 'atendente') return;
+  for (const u of unidades) {
+    if (u.tx === undefined || (drag && drag.u === u)) continue;
+    u.x += (u.tx - u.x) * 0.3; u.y += (u.ty - u.y) * 0.3;
+  }
+  if (inc && inc.tx !== undefined) { inc.x += (inc.tx - inc.x) * 0.3; inc.y += (inc.ty - inc.y) * 0.3; }
 }
 // Apresentador: aplica os comandos enviados pelos atendentes
 function processarComandos(snap) {
@@ -1572,13 +1648,16 @@ function iniciarRede(p, db, codigo) {
   if (p === 'apresentador') {
     $('copiarSala').style.display = '';
     comandosCol().onSnapshot(processarComandos);
-    setInterval(publicar, 400);
+    setInterval(publicar, 250);
     publicar();
   } else {
     estadoDoc().onSnapshot(snap => {
-      const d = dadosDe(snap);
-      if (d && d.estado) aplicarEstado(d);
+      ultimoSinal = performance.now();
+      const d = extrairEstado(snap);
+      if (d) aplicarEstado(d);
       else $('msg').textContent = 'A sala ' + codigo + ' ainda não foi aberta pelo apresentador. Aguarde.';
+    }, err => {
+      $('msg').textContent = 'Erro ao acompanhar a sala ' + codigo + ': ' + (err && err.message ? err.message : 'sem permissão ou conexão.');
     });
   }
 }
@@ -1629,6 +1708,13 @@ function loop(t) {
   const dt = Math.min(0.1, (t - last) / 1000);
   last = t;
   if (papel !== 'atendente') tick(dt * Number($('vel').value));
+  suavizarMovimento();
+  if (papel === 'atendente') {
+    // indica se o sinal do apresentador está chegando (ajuda a diagnosticar no celular)
+    $('sinalBox').style.display = '';
+    const parado = (performance.now() - ultimoSinal) / 1000;
+    $('sinal').textContent = !ultimoSinal ? 'aguardando' : parado < 3 ? 'ao vivo' : 'sem sinal há ' + Math.round(parado) + ' s';
+  }
   desenhar();
   atualizarUI();
   // Celular: informações somem após 6 s sem toque, exceto com viatura selecionada ou em posicionamento
