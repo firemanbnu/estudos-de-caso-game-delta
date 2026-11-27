@@ -589,7 +589,7 @@ function iniciarCaso() {
   const h0 = trajeto.length > 1 ? Math.atan2(trajeto[1].y - y, trajeto[1].x - x) : 0;
   inc = { x, y, h:h0, pi:1, movendo: trajeto.length > 1, parou:false, fogo:caso.fogo, fumaca:caso.fumaca, pax:fichaCaso().pax, paxInicial:fichaCaso().pax, feridos:0, resgatados:0, atendidos:0, evacuados:0, dangerT:0, ventoDeg:-135, ventoNome:'NO', fumAreaK:1 };
   modoTrajeto = false;
-  inc.focos = localizarFocos(desc, selTipo.value);
+  inc.focos = ajustarFocosAero(localizarFocos(desc, selTipo.value));
   pessoas = []; caminhantes = [];
   tempo = 0; usou = new Set();
   // As viaturas mantêm a posição e a ação que o atendente preparou antes do início
@@ -774,6 +774,15 @@ function desenharAviao(x, y, h) {
   const estab = s => { ctx.beginPath(); ctx.moveTo(-44, 5*s); ctx.lineTo(-56, 26*s); ctx.lineTo(-64, 26*s); ctx.lineTo(-58, 5*s); ctx.closePath(); };
   ctx.save();
   ctx.translate(x, y); ctx.rotate(h || 0); ctx.scale(ESC_AERO * AE.sx, ESC_AERO * AE.sy);
+  const foto = imgAero(AE.spec);
+  if (foto) {
+    // aeronave por imagem: a imagem ocupa exatamente comprimento x envergadura da ficha
+    ctx.save(); ctx.translate(6, 8); ctx.globalAlpha *= 0.28; ctx.drawImage(foto.sombra, -63, -62, 126, 124); ctx.restore();
+    ctx.drawImage(foto.img, -63, -62, 126, 124);
+    for (const p of portas) if (p.armada) { ctx.fillStyle = '#fb923c'; ctx.fillRect(p.lx - 2, p.ly - 1, 4, 2); }
+    ctx.restore();
+    return;
+  }
   // sombra
   ctx.save(); ctx.translate(6, 8); ctx.globalAlpha *= 0.25; ctx.fillStyle = '#000';
   corpo(); ctx.fill(); asa(1); ctx.fill(); asa(-1); ctx.fill(); estab(1); ctx.fill(); estab(-1); ctx.fill();
@@ -837,6 +846,17 @@ const LOCAIS = [
 const LOCAL_PADRAO = { motor:'motor esquerdo', combustivel:'asa esquerda', trem:'trem de pouso', fumaca:'fuselagem' };
 function normaliza(s) { return s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, ''); }
 // Procura no texto do caso os locais citados; se nenhum for citado, usa o local típico do tipo de emergência.
+// Aeronaves com imagem: o fogo no motor fica sobre o motor da imagem
+function ajustarFocosAero(focos) {
+  const o = AE.spec && AERO_IMG[AE.spec.id];
+  if (!o || !o.motor) return focos;
+  const Mx = M_POR_UL * AE.sx, My = M_POR_UL * AE.sy;
+  return focos.map(f => {
+    if (f.nome === 'motor esquerdo') return { ...f, lx: o.motor.x / Mx, ly: -o.motor.y / My };
+    if (f.nome === 'motor direito') return { ...f, lx: o.motor.x / Mx, ly: o.motor.y / My };
+    return f;
+  });
+}
 function localizarFocos(texto, casoKey) {
   const t = normaliza(texto || '');
   // "motores", "dois motores", "ambos os motores" ou "2 motores" citam os dois motores
@@ -862,6 +882,25 @@ const ESC_AERO = (ENVERGADURA_M / M_POR_PX) / ENVERGADURA_DESENHO;
 // Aeronave em uso (tamanho e portas vêm da ficha cadastrada): o desenho de referência é esticado em x (comprimento) e y (envergadura)
 const COMP_DESENHO_M = 126 * ESC_AERO * M_POR_PX, M_POR_UL = ESC_AERO * M_POR_PX;
 let AE = { sx:1, sy:1, spec:null }, aeroKey = '';
+// Imagens (vista de cima, nariz para a direita) usadas no lugar do desenho genérico.
+// halfW: meia largura da fuselagem (m); motor: posição do motor direito em metros (x para o nariz, y para a lateral), usada para o fogo no motor.
+const AERO_IMG = {
+  a320: { src:'a320-topo.png', halfW:1.9, motor:{ x:3.9, y:6.0 } },
+  a321: { src:'a321-topo.png', halfW:2.0, motor:{ x:4.7, y:6.3 } },
+  b738: { src:'b738-topo.png', halfW:1.9, motor:{ x:9.2, y:6.1 } }
+};
+for (const id in AERO_IMG) {
+  const o = AERO_IMG[id]; o.img = new Image();
+  o.img.onload = () => {
+    // silhueta escura para a sombra
+    const c = document.createElement('canvas'); c.width = o.img.width; c.height = o.img.height;
+    const x = c.getContext('2d'); x.drawImage(o.img, 0, 0); x.globalCompositeOperation = 'source-in'; x.fillStyle = '#000'; x.fillRect(0, 0, c.width, c.height);
+    o.sombra = c; o.ok = true;
+    if (typeof acDesenhar === 'function') acDesenhar();
+  };
+  o.img.src = o.src;
+}
+const imgAero = spec => { const o = spec && AERO_IMG[spec.id]; return o && o.ok ? o : null; };
 function aeroParaMundo(lx, ly, a = aeroAtual()) {
   const c = Math.cos(a.h || 0), s = Math.sin(a.h || 0);
   lx *= ESC_AERO * AE.sx; ly *= ESC_AERO * AE.sy;
@@ -2400,7 +2439,7 @@ const acCv = $('acCanvas'), acC = acCv.getContext('2d');
 function acGeom() {
   const comp = Number($('acComp').value) || acEdit.comp, env = Number($('acEnv').value) || acEdit.env;
   const ppm = Math.min((acCv.width - 40) / (comp + 24), (acCv.height - 30) / (env + 8));
-  return { comp, env, ppm, cx: acCv.width / 2, cy: acCv.height / 2, sx: comp / COMP_DESENHO_M, sy: env / 40, halfW: 9 * M_POR_UL * env / 40 };
+  return { comp, env, ppm, cx: acCv.width / 2, cy: acCv.height / 2, sx: comp / COMP_DESENHO_M, sy: env / 40, halfW: (AERO_IMG[acEdit.id] && AERO_IMG[acEdit.id].halfW) || 9 * M_POR_UL * env / 40 };
 }
 function acPx(g, q) { return [g.cx + q[0] * g.ppm, g.cy + q[1] * g.ppm]; }
 function acDesenhar() {
@@ -2412,11 +2451,15 @@ function acDesenhar() {
   const corpo = () => { c.beginPath(); c.moveTo(62, 0); c.bezierCurveTo(62, -8, 50, -9, 40, -9); c.lineTo(-48, -8); c.lineTo(-64, -2.5); c.lineTo(-64, 2.5); c.lineTo(-48, 8); c.lineTo(40, 9); c.bezierCurveTo(50, 9, 62, 8, 62, 0); c.closePath(); };
   const asa = k => { c.beginPath(); c.moveTo(18, 7*k); c.lineTo(-14, 62*k); c.lineTo(-27, 62*k); c.lineTo(-12, 7*k); c.closePath(); };
   const est = k => { c.beginPath(); c.moveTo(-44, 5*k); c.lineTo(-56, 26*k); c.lineTo(-64, 26*k); c.lineTo(-58, 5*k); c.closePath(); };
-  c.fillStyle = '#cbd5e1'; c.strokeStyle = '#64748b'; c.lineWidth = 0.8;
-  [1, -1].forEach(k => { asa(k); c.fill(); c.stroke(); est(k); c.fill(); c.stroke(); });
-  c.fillStyle = '#94a3b8'; [1, -1].forEach(k => c.fillRect(-6, k > 0 ? 30 : -38, 24, 8));
-  c.fillStyle = '#f1f5f9'; corpo(); c.fill(); c.stroke();
-  c.fillStyle = '#2563eb'; c.fillRect(-44, -1, 90, 2);
+  const foto = imgAero(acEdit);
+  if (foto) c.drawImage(foto.img, -63, -62, 126, 124);
+  else {
+    c.fillStyle = '#cbd5e1'; c.strokeStyle = '#64748b'; c.lineWidth = 0.8;
+    [1, -1].forEach(k => { asa(k); c.fill(); c.stroke(); est(k); c.fill(); c.stroke(); });
+    c.fillStyle = '#94a3b8'; [1, -1].forEach(k => c.fillRect(-6, k > 0 ? 30 : -38, 24, 8));
+    c.fillStyle = '#f1f5f9'; corpo(); c.fill(); c.stroke();
+    c.fillStyle = '#2563eb'; c.fillRect(-44, -1, 90, 2);
+  }
   c.restore();
   // escala
   c.strokeStyle = '#94a3b8'; c.lineWidth = 2; c.beginPath(); c.moveTo(14, acCv.height - 14); c.lineTo(14 + 5 * g.ppm, acCv.height - 14); c.stroke();
