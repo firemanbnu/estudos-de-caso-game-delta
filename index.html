@@ -225,6 +225,19 @@
       <button id="cfgPadrao" class="sec">Restaurar padrão</button>
       <button id="cfgCancelar" class="sec">Cancelar</button>
     </div>
+    <h2 style="margin-top:16px">Aeronaves</h2>
+    <p class="peq">Cadastre os tipos de aeronave com suas especificações. Na criação do cenário basta escolher o tipo: a aeronave já vem com tamanho, portas, escorregadeiras, passageiros e combustível.</p>
+    <div class="linha"><select id="acSel" style="flex:1"></select><button id="acNovo" class="sec">Nova</button><button id="acDel" class="sec">Excluir</button></div>
+    <div class="linha" style="width:100%"><label style="width:100%">Nome<br><input id="acNome" style="width:100%"></label></div>
+    <div class="linha"><label>Comprimento (m) <input id="acComp" type="number" min="5" max="90" step="0.1"></label>
+      <label>Envergadura (m) <input id="acEnv" type="number" min="5" max="90" step="0.1"></label></div>
+    <div class="linha"><label>Passageiros <input id="acPax" type="number" min="0" max="900"></label>
+      <label>Combustível <input id="acComb" style="width:110px" placeholder="Ex.: 6.500 kg"></label></div>
+    <p id="acCat" class="peq"></p>
+    <b style="font-size:12px">Portas e escorregadeiras</b>
+    <p class="peq">Posição em metros a partir do centro da aeronave (positivo = para o nariz). Tipo "Asa" = escorregadeira sobre a asa.</p>
+    <div id="acPortas"></div>
+    <div class="linha"><button id="acAddPorta" class="sec">+ Porta</button><button id="acSalvar">Salvar aeronave</button><button id="acPadrao" class="sec">Restaurar padrões</button></div>
   </section>
 
   <section id="secCaso" class="so-admin">
@@ -234,7 +247,7 @@
     <div class="linha"><label>Categoria <select id="cat"></select></label></div>
     <p class="peq">Ficha da aeronave: só é revelada ao atendente quando ele pedir à TWR.</p>
     <div class="linha" style="width:100%"><label style="width:100%">Companhia aérea<br><input id="fCia" placeholder="Ex.: Companhia exemplo" style="width:100%"></label></div>
-    <div class="linha" style="width:100%"><label style="width:100%">Tipo de aeronave<br><input id="fAero" placeholder="Ex.: Boeing 737-800" style="width:100%"></label></div>
+    <div class="linha" style="width:100%"><label style="width:100%">Tipo de aeronave<br><select id="fAeroSel" style="width:100%"></select></label></div>
     <div class="linha"><label>Passageiros a bordo <input id="fPax" type="number" min="0" placeholder="padrão do caso"></label></div>
     <div class="linha" style="width:100%"><label style="width:100%">Combustível a bordo<br><input id="fComb" placeholder="Ex.: 6.500 kg" style="width:100%"></label></div>
     <div class="linha"><button id="start">Iniciar cenário</button><button id="end" class="sec">Encerrar caso</button></div>
@@ -756,7 +769,7 @@ function desenharAviao(x, y, h) {
   const asa = s => { ctx.beginPath(); ctx.moveTo(18, 7*s); ctx.lineTo(-14, 62*s); ctx.lineTo(-27, 62*s); ctx.lineTo(-12, 7*s); ctx.closePath(); };
   const estab = s => { ctx.beginPath(); ctx.moveTo(-44, 5*s); ctx.lineTo(-56, 26*s); ctx.lineTo(-64, 26*s); ctx.lineTo(-58, 5*s); ctx.closePath(); };
   ctx.save();
-  ctx.translate(x, y); ctx.rotate(h || 0); ctx.scale(ESC_AERO, ESC_AERO);
+  ctx.translate(x, y); ctx.rotate(h || 0); ctx.scale(ESC_AERO * AE.sx, ESC_AERO * AE.sy);
   // sombra
   ctx.save(); ctx.translate(6, 8); ctx.globalAlpha *= 0.25; ctx.fillStyle = '#000';
   corpo(); ctx.fill(); asa(1); ctx.fill(); asa(-1); ctx.fill(); estab(1); ctx.fill(); estab(-1); ctx.fill();
@@ -842,9 +855,12 @@ function aeroAtual() {
 // A envergadura do desenho (124 unidades, ponta a ponta) passa a medir 40 m.
 const M_POR_PX = 1.5, ENVERGADURA_M = 40, ENVERGADURA_DESENHO = 124;
 const ESC_AERO = (ENVERGADURA_M / M_POR_PX) / ENVERGADURA_DESENHO;
+// Aeronave em uso (tamanho e portas vêm da ficha cadastrada): o desenho de referência é esticado em x (comprimento) e y (envergadura)
+const COMP_DESENHO_M = 126 * ESC_AERO * M_POR_PX, M_POR_UL = ESC_AERO * M_POR_PX;
+let AE = { sx:1, sy:1, spec:null }, aeroKey = '';
 function aeroParaMundo(lx, ly, a = aeroAtual()) {
   const c = Math.cos(a.h || 0), s = Math.sin(a.h || 0);
-  lx *= ESC_AERO; ly *= ESC_AERO;
+  lx *= ESC_AERO * AE.sx; ly *= ESC_AERO * AE.sy;
   return { x: a.x + lx*c - ly*s, y: a.y + lx*s + ly*c };
 }
 function portaBloqueada(p) {
@@ -990,6 +1006,8 @@ function acaoRapida(pt) {
 }
 // Ponta da escorregadeira: as traseiras abrem a 90° com a fuselagem; as dianteiras mantêm leve inclinação para a frente
 function pontaEscorregadeira(p, t = 1) {
+  // sobre a asa: sai pela porta de emergência, cruza a asa e desce pela borda de fuga
+  if (p.tipo === 'asa') return aeroParaMundo(p.lx - 22 * t, p.ly + p.lado * 40 * t);
   const avanco = p.lx < 0 ? 0 : 8;
   return aeroParaMundo(p.lx + avanco * t, p.ly + p.lado * 44 * t);
 }
@@ -1000,12 +1018,14 @@ function desenharEscorregadeiras() {
     if (p.armada) {
       const e = pontaEscorregadeira(p);
       const bloq = portaBloqueada(p);
-      ctx.strokeStyle = 'rgba(0,0,0,0.5)'; ctx.lineWidth = 7*k;
+      ctx.lineCap = 'round';
+      ctx.strokeStyle = 'rgba(0,0,0,0.5)'; ctx.lineWidth = 21*k;
       ctx.beginPath(); ctx.moveTo(d.x, d.y); ctx.lineTo(e.x, e.y); ctx.stroke();
-      ctx.strokeStyle = bloq ? '#ef4444' : '#fb923c'; ctx.lineWidth = 4.5*k;
+      ctx.strokeStyle = bloq ? '#ef4444' : (p.tipo === 'asa' ? '#f59e0b' : '#fb923c'); ctx.lineWidth = 13.5*k;
       ctx.beginPath(); ctx.moveTo(d.x, d.y); ctx.lineTo(e.x, e.y); ctx.stroke();
       ctx.fillStyle = bloq ? '#ef4444' : '#fde68a';
-      ctx.beginPath(); ctx.arc(e.x, e.y, 3*k, 0, Math.PI*2); ctx.fill();
+      ctx.beginPath(); ctx.arc(e.x, e.y, 5*k, 0, Math.PI*2); ctx.fill();
+      ctx.lineCap = 'butt';
     }
     if (cam.s < escalaInicial() * 2.5 && !p.armada) continue;
     ctx.font = `bold ${7*zt()}px sans-serif`; ctx.fillStyle = '#fff'; ctx.strokeStyle = 'rgba(0,0,0,0.8)'; ctx.lineWidth = 2.5*k;
@@ -1790,6 +1810,7 @@ function atualizarUI() {
   $('start').disabled = andando;
   $('end').disabled = !andando;
   $('tipo').disabled = andando;
+  $('fAeroSel').disabled = andando;
   $('desc').disabled = andando;
   $('cfgBtn').disabled = andando;
   if (andando) modoTrajeto = false;
@@ -1820,10 +1841,10 @@ function fichaCaso() {
   const cs = CASOS[selTipo.value];
   const descTxt = $('desc').value.trim();
   return {
-    pax: Number($('fPax').value) || cs.pax,
+    pax: Number($('fPax').value) || (AE.spec && AE.spec.pax) || cs.pax,
     comb: $('fComb').value.trim() || 'não informado',
     cia: $('fCia').value.trim() || 'não informada',
-    aero: $('fAero').value.trim() || 'não informado',
+    aero: (AE.spec && AE.spec.nome) || 'não informado',
     pane: cs.nome + (descTxt ? ': ' + descTxt : '')
   };
 }
@@ -2053,6 +2074,7 @@ function snapshotEstado() {
     s.inc = { ...inc, focos: inc.focos.map(f => ({ lx:f.lx, ly:f.ly, nome:f.nome })) };
     s.pessoas = pessoas.map(q => ({ porta:q.porta, t:q.t }));
     s.caminhantes = caminhantes.map(q => ({ x:q.x, y:q.y, chegou:q.chegou }));
+    s.aero = AE.spec;
     s.portas = portas.map(p => ({ id:p.id, armada:p.armada }));
     s.usou = [...usou];
     s.ocorrencias = ocorrencias.map(o => ({ ...o }));
@@ -2076,6 +2098,7 @@ function aplicarEstado(s) {
   }
   pessoas = s.pessoas || [];
   caminhantes = s.caminhantes || [];
+  if (s.aero) { const ak = JSON.stringify(s.aero); if (ak !== aeroKey) { aeroKey = ak; aplicarAeronaveSpec(s.aero); } }
   (s.portas || []).forEach(sp => { const p = portas.find(x => x.id === sp.id); if (p) p.armada = sp.armada; });
   aplicarUnidades(s.unidades);
   areas = s.areas || [];
@@ -2230,6 +2253,137 @@ function loop(t) {
   document.body.classList.toggle('ocioso', celular && !placing && !selId && !selAreaId && !modoTrajeto && performance.now() - ultimaAtividade > 6000);
   requestAnimationFrame(loop);
 }
+
+// ---------- Cadastro de aeronaves (Configurações) ----------
+const AERONAVES_PADRAO = [
+  { id:'b738', nome:'Boeing 737-800', comp:39.5, env:35.8, pax:186, comb:'14.000 kg',
+    portas:[ {nome:'frente esq.',x:13,lado:-1,tipo:'porta'}, {nome:'frente dir.',x:13,lado:1,tipo:'porta'},
+             {nome:'asa esq.',x:1.5,lado:-1,tipo:'asa'}, {nome:'asa dir.',x:1.5,lado:1,tipo:'asa'},
+             {nome:'traseira esq.',x:-11,lado:-1,tipo:'porta'}, {nome:'traseira dir.',x:-11,lado:1,tipo:'porta'} ] },
+  { id:'a320', nome:'Airbus A320', comp:37.6, env:35.8, pax:174, comb:'12.000 kg',
+    portas:[ {nome:'frente esq.',x:13,lado:-1,tipo:'porta'}, {nome:'frente dir.',x:13,lado:1,tipo:'porta'},
+             {nome:'asa esq.',x:0.5,lado:-1,tipo:'asa'}, {nome:'asa dir.',x:0.5,lado:1,tipo:'asa'},
+             {nome:'traseira esq.',x:-11.5,lado:-1,tipo:'porta'}, {nome:'traseira dir.',x:-11.5,lado:1,tipo:'porta'} ] },
+  { id:'e195', nome:'Embraer E195', comp:38.7, env:28.7, pax:118, comb:'9.000 kg',
+    portas:[ {nome:'frente esq.',x:12,lado:-1,tipo:'porta'}, {nome:'frente dir.',x:12,lado:1,tipo:'porta'},
+             {nome:'asa esq.',x:-1,lado:-1,tipo:'asa'}, {nome:'asa dir.',x:-1,lado:1,tipo:'asa'},
+             {nome:'traseira esq.',x:-12.5,lado:-1,tipo:'porta'}, {nome:'traseira dir.',x:-12.5,lado:1,tipo:'porta'} ] },
+  { id:'atr72', nome:'ATR 72-600', comp:27.2, env:27.1, pax:70, comb:'5.000 kg',
+    portas:[ {nome:'frente dir.',x:7,lado:1,tipo:'porta'}, {nome:'traseira esq.',x:-8,lado:-1,tipo:'porta'}, {nome:'traseira dir.',x:-8,lado:1,tipo:'porta'} ] },
+  { id:'a332', nome:'Airbus A330-200', comp:58.8, env:60.3, pax:250, comb:'60.000 kg',
+    portas:[ {nome:'porta 1 esq.',x:20,lado:-1,tipo:'porta'}, {nome:'porta 1 dir.',x:20,lado:1,tipo:'porta'},
+             {nome:'porta 2 esq.',x:11,lado:-1,tipo:'porta'}, {nome:'porta 2 dir.',x:11,lado:1,tipo:'porta'},
+             {nome:'porta 3 esq.',x:-8,lado:-1,tipo:'porta'}, {nome:'porta 3 dir.',x:-8,lado:1,tipo:'porta'},
+             {nome:'porta 4 esq.',x:-19,lado:-1,tipo:'porta'}, {nome:'porta 4 dir.',x:-19,lado:1,tipo:'porta'} ] }
+];
+const clonar = o => JSON.parse(JSON.stringify(o));
+let AERONAVES = [];
+function carregarAeronaves() {
+  try {
+    const a = JSON.parse(localStorage.getItem('sescinc-aeronaves'));
+    if (Array.isArray(a) && a.length && a.every(x => x && x.nome && x.comp > 0 && x.env > 0 && Array.isArray(x.portas) && x.portas.length)) return a;
+  } catch (e) {}
+  return clonar(AERONAVES_PADRAO);
+}
+function salvarAeronaves() { try { localStorage.setItem('sescinc-aeronaves', JSON.stringify(AERONAVES)); } catch (e) {} }
+// Categoria contra incêndio pelo comprimento do avião (RBAC 153)
+function categoriaPorComp(c) {
+  const lim = [9, 12, 18, 24, 28, 39, 49, 61, 76, 90];
+  for (let i = 0; i < lim.length; i++) if (c < lim[i] || (i === 9 && c <= lim[i])) return i + 1;
+  return 10;
+}
+// Aplica a ficha: tamanho do desenho e portas com as posições cadastradas
+function aplicarAeronaveSpec(spec) {
+  AE = { sx: spec.comp / COMP_DESENHO_M, sy: spec.env / 40, spec };
+  portas = spec.portas.map((d, i) => ({ id:'P' + (i + 1), nome:d.nome, lx: d.x / (M_POR_UL * AE.sx), ly: d.lado * 9, lado:d.lado, tipo:d.tipo, armada:false, prog:0 }));
+  $('portasList').innerHTML = '';
+}
+const selAero = $('fAeroSel');
+function montarSelAero(manter) {
+  const antes = manter && AE.spec ? AE.spec.id : null;
+  selAero.innerHTML = '';
+  AERONAVES.forEach(a => { const o = document.createElement('option'); o.value = a.id; o.textContent = a.nome; selAero.appendChild(o); });
+  selAero.value = AERONAVES.some(a => a.id === antes) ? antes : AERONAVES[0].id;
+}
+// Escolher o tipo preenche passageiros, combustível e categoria com os dados da aeronave
+function escolherAeronave(preencher) {
+  const spec = AERONAVES.find(a => a.id === selAero.value) || AERONAVES[0];
+  aplicarAeronaveSpec(spec);
+  if (preencher) { $('fPax').value = spec.pax; $('fComb').value = spec.comb || ''; }
+  selCat.value = String(categoriaPorComp(spec.comp));
+}
+selAero.onchange = () => escolherAeronave(true);
+
+// editor
+let acEdit = null;
+const acSel = $('acSel');
+function acMontarLista(id) {
+  acSel.innerHTML = '';
+  AERONAVES.forEach(a => { const o = document.createElement('option'); o.value = a.id; o.textContent = a.nome; acSel.appendChild(o); });
+  acSel.value = id || AERONAVES[0].id;
+  acCarregar();
+}
+function acCarregar() {
+  acEdit = clonar(AERONAVES.find(a => a.id === acSel.value) || AERONAVES[0]);
+  $('acNome').value = acEdit.nome; $('acComp').value = acEdit.comp; $('acEnv').value = acEdit.env;
+  $('acPax').value = acEdit.pax; $('acComb').value = acEdit.comb || '';
+  acCatTxt(); acMontarPortas();
+}
+function acCatTxt() { $('acCat').textContent = 'Categoria contra incêndio pelo comprimento: ' + categoriaPorComp(Number($('acComp').value) || acEdit.comp) + '.'; }
+function acMontarPortas() {
+  const box = $('acPortas'); box.innerHTML = '';
+  acEdit.portas.forEach((d, j) => {
+    const r = document.createElement('div'); r.className = 'linha';
+    r.innerHTML = '<input class="pn" style="width:92px" value="' + esc(d.nome) + '">' +
+      '<input class="px" type="number" step="0.5" style="width:62px" value="' + d.x + '"> m' +
+      '<select class="pl"><option value="-1">Esq.</option><option value="1">Dir.</option></select>' +
+      '<select class="pt"><option value="porta">Porta</option><option value="asa">Asa</option></select>' +
+      '<button class="sec pr" title="Remover">✕</button>';
+    box.appendChild(r);
+    r.querySelector('.pl').value = String(d.lado); r.querySelector('.pt').value = d.tipo;
+    r.querySelector('.pn').oninput = e => d.nome = e.target.value;
+    r.querySelector('.px').oninput = e => d.x = Number(e.target.value) || 0;
+    r.querySelector('.pl').onchange = e => d.lado = Number(e.target.value);
+    r.querySelector('.pt').onchange = e => d.tipo = e.target.value;
+    r.querySelector('.pr').onclick = () => { if (acEdit.portas.length > 1) { acEdit.portas.splice(j, 1); acMontarPortas(); } };
+  });
+}
+acSel.onchange = acCarregar;
+$('acComp').oninput = acCatTxt;
+$('acAddPorta').onclick = () => { acEdit.portas.push({ nome:'nova porta', x:0, lado:-1, tipo:'porta' }); acMontarPortas(); };
+$('acNovo').onclick = () => {
+  const n = { id:'ac' + Date.now(), nome:'Nova aeronave', comp:30, env:30, pax:100, comb:'',
+    portas:[ {nome:'frente esq.',x:9,lado:-1,tipo:'porta'}, {nome:'frente dir.',x:9,lado:1,tipo:'porta'}, {nome:'traseira esq.',x:-9,lado:-1,tipo:'porta'}, {nome:'traseira dir.',x:-9,lado:1,tipo:'porta'} ] };
+  AERONAVES.push(n); salvarAeronaves(); montarSelAero(true); acMontarLista(n.id);
+};
+$('acDel').onclick = () => {
+  if (AERONAVES.length <= 1) { $('msg').textContent = 'Mantenha pelo menos uma aeronave cadastrada.'; return; }
+  AERONAVES = AERONAVES.filter(a => a.id !== acSel.value);
+  salvarAeronaves(); montarSelAero(true); escolherAeronave(false); acMontarLista();
+};
+$('acSalvar').onclick = () => {
+  acEdit.nome = $('acNome').value.trim() || 'Aeronave sem nome';
+  acEdit.comp = clamp(Number($('acComp').value) || 30, 5, 90);
+  acEdit.env = clamp(Number($('acEnv').value) || 30, 5, 90);
+  acEdit.pax = clamp(Math.round(Number($('acPax').value) || 0), 0, 900);
+  acEdit.comb = $('acComb').value.trim();
+  const i = AERONAVES.findIndex(a => a.id === acEdit.id);
+  if (i >= 0) AERONAVES[i] = clonar(acEdit);
+  salvarAeronaves();
+  const atual = AE.spec && AE.spec.id;
+  montarSelAero(true);
+  if (atual === acEdit.id) escolherAeronave(true);
+  acMontarLista(acEdit.id);
+  $('msg').textContent = 'Aeronave "' + acEdit.nome + '" salva.';
+};
+$('acPadrao').onclick = () => {
+  AERONAVES = clonar(AERONAVES_PADRAO); salvarAeronaves();
+  montarSelAero(false); escolherAeronave(true); acMontarLista();
+  $('msg').textContent = 'Aeronaves padrão restauradas.';
+};
+AERONAVES = carregarAeronaves();
+montarSelAero(false); escolherAeronave(true); acMontarLista();
+
 if (matchMedia('(max-width:700px)').matches) setPainel(false);
 requestAnimationFrame(loop);
 </script>
