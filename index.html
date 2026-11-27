@@ -654,7 +654,10 @@ function aeroAtual() {
   }
   return { x, y, h };
 }
-const ESC_AERO = 0.8; // aeronave 20% menor que antes
+// Escala real: a pista (45 m) ocupa cerca de 30 px na imagem, então 1 px ≈ 1,5 m.
+// A envergadura do desenho (124 unidades, ponta a ponta) passa a medir 40 m.
+const M_POR_PX = 1.5, ENVERGADURA_M = 40, ENVERGADURA_DESENHO = 124;
+const ESC_AERO = (ENVERGADURA_M / M_POR_PX) / ENVERGADURA_DESENHO;
 function aeroParaMundo(lx, ly, a = aeroAtual()) {
   const c = Math.cos(a.h || 0), s = Math.sin(a.h || 0);
   lx *= ESC_AERO; ly *= ESC_AERO;
