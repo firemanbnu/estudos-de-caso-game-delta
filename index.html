@@ -482,6 +482,7 @@ let portas = [
   { id:'P4', nome:'traseira dir.', lx:-30, ly:9,  lado:1,  armada:false, prog:0 }
 ];
 let pessoas = [];   // passageiros descendo pelas escorregadeiras
+let caminhantes = []; // passageiros que andam até a área de reunião atrás do CRS
 let rosterKey = '', selKey = '', barraKey = '';
 let twrPedidos = [];   // pedidos recebidos da TWR (apenas o administrador responde)
 let twrRespostas = []; // respostas já liberadas ao atendente (enviadas no estado)
@@ -572,7 +573,7 @@ function iniciarCaso() {
   inc = { x, y, h:h0, pi:1, movendo: trajeto.length > 1, parou:false, fogo:caso.fogo, fumaca:caso.fumaca, pax:fichaCaso().pax, paxInicial:fichaCaso().pax, feridos:0, resgatados:0, atendidos:0, evacuados:0, dangerT:0, ventoDeg:-135, ventoNome:'NO', fumAreaK:1 };
   modoTrajeto = false;
   inc.focos = localizarFocos(desc, selTipo.value);
-  pessoas = [];
+  pessoas = []; caminhantes = [];
   tempo = 0; usou = new Set();
   // As viaturas mantêm a posição e a ação que o atendente preparou antes do início
   unidades.forEach(u => { u.tanque = TIPOS[u.tipo].tanque || 0; u.prog = 0; u.reab = 0; });
@@ -619,10 +620,28 @@ function moverAeronave(dt) {
     if (!inc.parou) { inc.parou = true; $('msg').textContent = 'Aeronave parou. O incêndio e a cabine seguem na posição final.'; }
   }
 }
+// Área de reunião: logo atrás do CRS e, havendo PCM, a meio caminho entre o fundo do CRS e o PCM
+function pontoReuniao(crs, q) {
+  const h = crs.h || 0;
+  let x = crs.x - Math.cos(h) * 10, y = crs.y - Math.sin(h) * 10;
+  const pcm = unidades.find(v => v.tipo === 'CMD');
+  if (pcm) { x += (pcm.x - x) * 0.5; y += (pcm.y - y) * 0.5; }
+  return { x: x + (q.ox || 0), y: y + (q.oy || 0) };
+}
 function tick(dt) {
   if (pausado) return;
   pessoas.forEach(q => { q.t += dt / 3; });
   pessoas = pessoas.filter(q => q.t < 1);
+  for (const q of caminhantes) {
+    const crs = unidadePorId(q.crs);
+    if (crs) q.alvo = pontoReuniao(crs, q);
+    if (!q.alvo) continue;
+    const dx = q.alvo.x - q.x, dy = q.alvo.y - q.y, d = Math.hypot(dx, dy), passo = 22 * dt;
+    if (d <= passo) {
+      q.x = q.alvo.x; q.y = q.alvo.y;
+      if (!q.chegou) { q.chegou = true; if (inc) inc.resgatados++; }
+    } else { q.x += dx / d * passo; q.y += dy / d * passo; }
+  }
   const ativo = estado === 'andamento' && inc;
   if (ativo) tempo += dt;
   let combate = false;
@@ -683,13 +702,23 @@ function tick(dt) {
       u.tanque -= dt * (u.vazao === 'baixa' ? 0.5 : 1);
       usou.add(u.id); combate = true;
       if (u.tanque <= 0) { u.tanque = 0; u.acao = 'parado'; $('msg').textContent = u.id + ' sem água. Envie para reabastecer.'; }
-    } else if (u.acao === 'resgate' && emCena && inc.pax > 0) {
+    } else if (u.acao === 'resgate' && emCena && inc.pax > 0 && !inc.movendo) {
       u.prog += dt; usou.add(u.id);
-      if (u.prog >= 6) { u.prog = 0; inc.pax--; inc.resgatados++; }
+      if (u.prog >= 6) {
+        u.prog = 0; inc.pax--;
+        // sai pela porta mais próxima do CRS e segue andando até a área de reunião
+        let d0 = null, dm = Infinity;
+        for (const pt of portas) { const w = aeroParaMundo(pt.lx, pt.ly), d = Math.hypot(w.x - u.x, w.y - u.y); if (d < dm) { dm = d; d0 = w; } }
+        if (d0) caminhantes.push({ x:d0.x, y:d0.y, crs:u.id, ox:(Math.random() - 0.5) * 8, oy:(Math.random() - 0.5) * 6, chegou:false });
+        else inc.resgatados++;
+      }
     } else if (u.acao === 'atendimento' && inc.resgatados > 0 && (emCena || naAreaAT(u))) {
       u.prog += dt; usou.add(u.id);
-      if (u.prog >= 5) { u.prog = 0; inc.resgatados--; inc.atendidos++; }
-    } else {
+      if (u.prog >= 5) {
+        u.prog = 0; inc.resgatados--; inc.atendidos++;
+        const i = caminhantes.findIndex(q => q.chegou); if (i >= 0) caminhantes.splice(i, 1);
+      }
+    } else if (u.acao !== 'resgate') {
       u.prog = 0;
     }
   }
@@ -959,12 +988,17 @@ function acaoRapida(pt) {
   const acao = { AB:'combate', AP:'combate', UR:'resgate', AMB:'atendimento' }[u.tipo];
   if (acao) comandarAcao(u, acao);
 }
+// Ponta da escorregadeira: as traseiras abrem a 90° com a fuselagem; as dianteiras mantêm leve inclinação para a frente
+function pontaEscorregadeira(p, t = 1) {
+  const avanco = p.lx < 0 ? 0 : 8;
+  return aeroParaMundo(p.lx + avanco * t, p.ly + p.lado * 44 * t);
+}
 function desenharEscorregadeiras() {
   const k = 1/cam.s;
   for (const p of portas) {
     const d = aeroParaMundo(p.lx, p.ly);
     if (p.armada) {
-      const e = aeroParaMundo(p.lx + 8, p.ly + p.lado*44);
+      const e = pontaEscorregadeira(p);
       const bloq = portaBloqueada(p);
       ctx.strokeStyle = 'rgba(0,0,0,0.5)'; ctx.lineWidth = 7*k;
       ctx.beginPath(); ctx.moveTo(d.x, d.y); ctx.lineTo(e.x, e.y); ctx.stroke();
@@ -982,10 +1016,16 @@ function desenharPessoas() {
   const k = 1/cam.s;
   for (const q of pessoas) {
     const p = portas[q.porta];
-    const w = aeroParaMundo(p.lx + 8*q.t, p.ly + p.lado*44*q.t);
+    const w = pontaEscorregadeira(p, q.t);
     ctx.strokeStyle = 'rgba(0,0,0,0.7)'; ctx.lineWidth = k;
-    ctx.fillStyle = '#e0f2fe'; ctx.beginPath(); ctx.arc(w.x, w.y - 4, 2.6, 0, Math.PI*2); ctx.fill(); ctx.stroke();
-    ctx.fillStyle = '#0ea5e9'; ctx.fillRect(w.x - 3, w.y - 1, 6, 7);
+    ctx.fillStyle = '#e0f2fe'; ctx.beginPath(); ctx.arc(w.x, w.y - 2, 1.3, 0, Math.PI*2); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = '#0ea5e9'; ctx.fillRect(w.x - 1.5, w.y - 0.7, 3, 3.6);
+  }
+  // passageiros guiados pelo CRS: andam da aeronave até a área de reunião atrás do CRS, perto do PCM
+  for (const q of caminhantes) {
+    ctx.strokeStyle = 'rgba(0,0,0,0.7)'; ctx.lineWidth = k;
+    ctx.fillStyle = '#fde68a'; ctx.beginPath(); ctx.arc(q.x, q.y - 2, 1.3, 0, Math.PI*2); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = q.chegou ? '#22c55e' : '#f59e0b'; ctx.fillRect(q.x - 1.5, q.y - 0.7, 3, 3.6);
   }
 }
 function atualizarPortas() {
@@ -1901,10 +1941,10 @@ function aplicarComando(c, local) {
       if (u) { u.x = c.x; u.y = c.y; u.dest = null; u.area = null; if (u.acao === 'base') u.acao = 'parado'; u.prog = 0; }
       break;
     case 'ataque':
-      if (u && estado === 'andamento') { u.dest = { x:c.x, y:c.y }; u.area = null; u.acao = c.acao; u.prog = 0; }
+      if (u && estado === 'andamento') { u.dest = { x:c.x, y:c.y }; u.area = null; u.acao = c.acao; u.prog = c.acao === 'resgate' ? 6 : 0; }
       break;
     case 'acao':
-      if (u) { u.acao = c.acao; if (u.acao === 'parado') u.dest = null; u.prog = 0; }
+      if (u) { u.acao = c.acao; if (u.acao === 'parado') u.dest = null; u.prog = c.acao === 'resgate' ? 6 : 0; }
       break;
     case 'base':
       if (u && TIPOS[u.tipo].tanque && u.acao !== 'reab') {
@@ -2012,6 +2052,7 @@ function snapshotEstado() {
     s.caso = selTipo.value;
     s.inc = { ...inc, focos: inc.focos.map(f => ({ lx:f.lx, ly:f.ly, nome:f.nome })) };
     s.pessoas = pessoas.map(q => ({ porta:q.porta, t:q.t }));
+    s.caminhantes = caminhantes.map(q => ({ x:q.x, y:q.y, chegou:q.chegou }));
     s.portas = portas.map(p => ({ id:p.id, armada:p.armada }));
     s.usou = [...usou];
     s.ocorrencias = ocorrencias.map(o => ({ ...o }));
@@ -2034,6 +2075,7 @@ function aplicarEstado(s) {
     if (incAnt) { inc.x = incAnt.x; inc.y = incAnt.y; }
   }
   pessoas = s.pessoas || [];
+  caminhantes = s.caminhantes || [];
   (s.portas || []).forEach(sp => { const p = portas.find(x => x.id === sp.id); if (p) p.armada = sp.armada; });
   aplicarUnidades(s.unidades);
   areas = s.areas || [];
