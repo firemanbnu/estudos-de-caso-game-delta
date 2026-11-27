@@ -33,6 +33,9 @@
   #cfg { display:none; }
 
   /* Barra de comando sobre o mapa */
+  #menuUnid { position:fixed; z-index:6; background:rgba(15,23,42,0.97); border:1px solid #3a4a63; border-radius:8px; padding:6px; min-width:180px; box-shadow:0 4px 14px rgba(0,0,0,.45); }
+  #menuUnid .tit { color:#9ca3af; font-size:11px; text-transform:uppercase; letter-spacing:.04em; padding:2px 6px 4px; }
+  #menuUnid button { display:block; width:100%; text-align:left; margin:2px 0; font-size:13px; padding:7px 9px; }
   #barra { position:fixed; left:60px; right:356px; bottom:8px; background:rgba(15,23,42,0.94); padding:8px 10px; border-radius:10px; z-index:2; font-size:13px; display:flex; flex-direction:column; gap:2px; }
   body.sem-painel #barra { right:8px; }
   #barra .linha { margin:2px 0; gap:5px; }
@@ -108,6 +111,7 @@
   <button id="zCentro" class="sec" title="Centralizar na aeronave, ou na base se não houver caso (tecla C)">Centro</button>
 </div>
 
+<div id="menuUnid" style="display:none"></div>
 <div id="barra">
   <div class="linha">
     <span class="rot">Adicionar</span>
@@ -941,7 +945,8 @@ function desenharVeiculo(u) {
   // desenho em caixa de referência 34 x 15, esticada para as medidas reais (comprimento x largura)
   const [cm, lm] = DIM_VEICULO[u.tipo] || [6, 2.5];
   const L = 34, Wd = 15;
-  const sx = (cm / M_POR_PX) / L, sy = (lm / M_POR_PX) / Wd;
+  const VEH_ESC = 1.5; // viaturas 50% maiores que a escala real
+  const sx = VEH_ESC * (cm / M_POR_PX) / L, sy = VEH_ESC * (lm / M_POR_PX) / Wd;
   const lw = k / ((sx + sy) / 2);   // espessura de linha constante na tela
   if (u.id === selId) {
     ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.5*k; ctx.setLineDash([3*k, 2*k]);
@@ -1083,6 +1088,7 @@ cv.addEventListener('wheel', e => {
 }, { passive:false });
 
 cv.addEventListener('mousedown', e => {
+  fecharMenu();
   if (e.button === 2) { panning = { x:e.clientX, y:e.clientY, ox:cam.ox, oy:cam.oy, moved:false, dir:true }; return; }
   if (e.button !== 0 || cfgAberta) return;
   const p = toWorld(e.clientX, e.clientY);
@@ -1122,8 +1128,9 @@ window.addEventListener('mousemove', e => {
     if (papel !== 'atendente') { u.dest = null; u.area = null; u.prog = 0; if (u.acao === 'base') u.acao = 'parado'; }
   }
 });
-window.addEventListener('mouseup', () => {
+window.addEventListener('mouseup', e => {
   if (drag && drag.moved && papel === 'atendente') executar({ tipo:'mover', id:drag.u.id, x:drag.px, y:drag.py });
+  if (drag && !drag.moved) abrirMenuUnidade(drag.u, e.clientX, e.clientY);
   if (panning && !panning.moved) {
     if (panning.dir) acaoRapida(panning);
     else cliqueMapa(panning.p);
@@ -1225,14 +1232,41 @@ function atualizarPlace() {
 document.querySelectorAll('[data-add]').forEach(b => b.onclick = () => { placing = b.dataset.add; atualizarPlace(); });
 
 // Barra de comando: só mostra as ações que a viatura selecionada pode executar
-document.querySelectorAll('#barraCmd [data-acao]').forEach(b => b.onclick = () => {
-  const u = unidadePorId(selId); if (!u) return;
-  const act = b.dataset.acao;
+function dispararAcao(u, act) {
   if (act === 'base') executar({ tipo:'base', id:u.id });
   else if (act === 'parado') executar({ tipo:'acao', id:u.id, acao:'parado' });
   else if (act === 'espuma') espumar(u);
   else comandarAcao(u, act);
+}
+document.querySelectorAll('#barraCmd [data-acao]').forEach(b => b.onclick = () => {
+  const u = unidadePorId(selId); if (!u) return;
+  dispararAcao(u, b.dataset.acao);
 });
+// Menu de comandos ao clicar sobre a viatura: fecha ao escolher um comando, ao clicar fora ou com Esc
+let menuUnidId = null;
+function fecharMenu() { $('menuUnid').style.display = 'none'; menuUnidId = null; }
+const ROTULO_MENU = { base:'Retornar à base', parado:'Parar' };
+function abrirMenuUnidade(u, x, y) {
+  const m = $('menuUnid'); m.innerHTML = '';
+  const temComb = ocorrencias.some(o => o.tipo === 'comb' && !o.espuma);
+  const opcoes = [...TIPOS[u.tipo].acoes];
+  if (TIPOS[u.tipo].tanque && !opcoes.includes('base')) opcoes.push('base');
+  if ((u.tipo === 'AB' || u.tipo === 'AP') && temComb && !opcoes.includes('espuma')) opcoes.push('espuma');
+  const tit = document.createElement('div'); tit.className = 'tit'; tit.textContent = u.id + ' · ' + TIPOS[u.tipo].nome;
+  m.appendChild(tit);
+  for (const act of opcoes) {
+    const b = document.createElement('button');
+    b.textContent = ROTULO_MENU[act] || ACAO_ROTULO[act] || act;
+    b.onclick = () => { fecharMenu(); dispararAcao(u, act); };
+    m.appendChild(b);
+  }
+  m.style.display = 'block';
+  const r = m.getBoundingClientRect();
+  m.style.left = Math.max(8, Math.min(x + 14, innerWidth - r.width - 8)) + 'px';
+  m.style.top = Math.max(8, Math.min(y + 14, innerHeight - r.height - 8)) + 'px';
+  menuUnidId = u.id;
+}
+window.addEventListener('keydown', e => { if (e.key === 'Escape') fecharMenu(); });
 $('barraEnviar').onclick = () => {
   const u = unidadePorId(selId), a = areaPorId($('barraArea').value);
   if (u && a) executar({ tipo:'area', id:u.id, areaId:a.id });
