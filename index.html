@@ -1541,30 +1541,64 @@ function desenharVeiculo(u) {
   }
   ctx.save();
   ctx.translate(u.x, u.y); ctx.rotate(u.h || 0); ctx.scale(sx, sy);
+  const rr = (x, y, w, h, r) => { ctx.beginPath(); ctx.roundRect(x, y, w, h, r); };
+  const ativa = u.acao !== 'parado' || !!u.dest;
+  const fase = Math.floor(performance.now() / 110) % 2;
   // sombra
-  ctx.fillStyle = 'rgba(0,0,0,0.35)'; ctx.fillRect(-L/2+2, -Wd/2+3, L, Wd);
-  // rodas
-  ctx.fillStyle = '#111';
-  for (const [x, y] of [[-L/2+6,-Wd/2-2],[-L/2+6,Wd/2-1],[L/2-12,-Wd/2-2],[L/2-12,Wd/2-1]]) ctx.fillRect(x, y, 6, 3);
-  // carroceria e cabine
-  ctx.fillStyle = t.cor; ctx.fillRect(-L/2, -Wd/2, L, Wd);
-  ctx.fillStyle = 'rgba(255,255,255,0.28)'; ctx.fillRect(-L/2 + 1, -Wd/2 + 1, L - 2, 3);
-  ctx.fillStyle = t.cab; ctx.fillRect(L/2-10, -Wd/2, 10, Wd);
-  ctx.fillStyle = 'rgba(186,230,253,0.85)'; ctx.fillRect(L/2-8, -Wd/2+2, 5, Wd-4);
-  ctx.strokeStyle = '#1f2937'; ctx.lineWidth = lw; ctx.strokeRect(-L/2, -Wd/2, L, Wd);
+  ctx.fillStyle = 'rgba(0,0,0,0.3)'; rr(-L/2+1.5, -Wd/2+2.5, L, Wd, 3); ctx.fill();
+  // rodas com para-lamas
+  ctx.fillStyle = '#0b0b0c';
+  for (const [x, y] of [[-L/2+4,-Wd/2-1.6],[-L/2+4,Wd/2-1.4],[-L/2+11,-Wd/2-1.6],[-L/2+11,Wd/2-1.4],[L/2-9,-Wd/2-1.6],[L/2-9,Wd/2-1.4]]) { rr(x, y, 5, 3, 1); ctx.fill(); }
+  // carroceria (tanque) com cantos arredondados e brilho
+  const gc = ctx.createLinearGradient(0, -Wd/2, 0, Wd/2);
+  gc.addColorStop(0, 'rgba(255,255,255,0.55)'); gc.addColorStop(0.35, 'rgba(255,255,255,0)'); gc.addColorStop(1, 'rgba(0,0,0,0.3)');
+  ctx.fillStyle = t.cor; rr(-L/2, -Wd/2, L - 9, Wd, 2.2); ctx.fill();
+  ctx.fillStyle = gc; rr(-L/2, -Wd/2, L - 9, Wd, 2.2); ctx.fill();
+  // faixa de identificação branca e prateada ao longo da lateral
+  ctx.fillStyle = 'rgba(255,255,255,0.9)'; ctx.fillRect(-L/2+2, -Wd/2+3.2, L-15, 0.9); ctx.fillRect(-L/2+2, Wd/2-4.1, L-15, 0.9);
+  // cabine mais estreita, para-brisa e capô
+  ctx.fillStyle = t.cab; rr(L/2-12, -Wd/2+0.8, 12, Wd-1.6, 3); ctx.fill();
+  ctx.fillStyle = gc; rr(L/2-12, -Wd/2+0.8, 12, Wd-1.6, 3); ctx.fill();
+  ctx.fillStyle = 'rgba(147,197,253,0.95)'; rr(L/2-5.2, -Wd/2+2.3, 3.6, Wd-4.6, 1.2); ctx.fill();
+  ctx.fillStyle = 'rgba(30,41,59,0.8)'; rr(L/2-9.6, -Wd/2+2.6, 3, Wd-5.2, 1); ctx.fill();   // teto/vidro traseiro da cabine
+  // para-choque e faróis
+  ctx.fillStyle = '#9ca3af'; rr(L/2-1.2, -Wd/2+1.6, 1.8, Wd-3.2, 0.8); ctx.fill();
+  ctx.fillStyle = '#fef08a'; ctx.fillRect(L/2-1.6, -Wd/2+1.4, 1.2, 1.6); ctx.fillRect(L/2-1.6, Wd/2-3, 1.2, 1.6);
+  // retrovisores
+  ctx.fillStyle = '#111'; ctx.fillRect(L/2-6.5, -Wd/2-0.9, 1.6, 1.1); ctx.fillRect(L/2-6.5, Wd/2-0.2, 1.6, 1.1);
+  // contorno
+  ctx.strokeStyle = 'rgba(15,23,42,0.85)'; ctx.lineWidth = lw; rr(-L/2, -Wd/2, L - 9, Wd, 2.2); ctx.stroke(); rr(L/2-12, -Wd/2+0.8, 12, Wd-1.6, 3); ctx.stroke();
   // detalhes por tipo
   if (u.tipo === 'AB' || u.tipo === 'AP') {
-    ctx.fillStyle = '#dc2626'; ctx.fillRect(-L/2+3, -1.2, L-14, 2.4);
-    ctx.beginPath(); ctx.arc(-L/2+8, 0, 3, 0, Math.PI*2); ctx.fill();
+    // canhão de teto (torre) e mangotes
+    ctx.fillStyle = '#374151'; ctx.beginPath(); ctx.arc(-L/2+14, 0, 2.6, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle = '#e5e7eb'; ctx.fillRect(-L/2+14, -0.8, 6, 1.6);
+    ctx.fillStyle = '#facc15'; ctx.fillRect(-L/2+3, -2.6, 7, 1.1); ctx.fillRect(-L/2+3, 1.5, 7, 1.1);
+    ctx.fillStyle = '#1f2937'; ctx.beginPath(); ctx.arc(-L/2+5.5, 0, 1.4, 0, Math.PI*2); ctx.fill();
   } else if (u.tipo === 'UR') {
-    ctx.fillStyle = '#111'; ctx.fillRect(-L/2+3, -1, L-14, 2);
-    ctx.fillStyle = '#f8fafc'; ctx.fillRect(-L/2+8, -Wd/2+2, 6, 2);
+    ctx.fillStyle = '#1f2937'; rr(-L/2+3, -2.5, L-17, 5, 1); ctx.fill();
+    ctx.fillStyle = '#f8fafc'; ctx.fillRect(-L/2+6, -1.5, L-23, 0.9); ctx.fillRect(-L/2+6, 0.6, L-23, 0.9);
   } else if (u.tipo === 'AMB') {
-    ctx.fillStyle = '#1d4ed8'; ctx.fillRect(-L/2, -1.4, L, 2.8);
-    ctx.fillStyle = '#dc2626'; ctx.fillRect(-7.5, -4, 3, 8); ctx.fillRect(-10.5, -1.5, 9, 3);
-    ctx.fillStyle = '#3b82f6'; ctx.beginPath(); ctx.arc(-L/2+6, 0, 2.5, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle = '#f8fafc'; rr(-L/2+2, -Wd/2+4.5, L-14, Wd-9, 1); ctx.fill();
+    ctx.fillStyle = '#dc2626'; ctx.fillRect(-9.2, -3.2, 2.2, 6.4); ctx.fillRect(-11.2, -1.1, 6.2, 2.2);
   } else if (u.tipo === 'CMD') {
-    ctx.fillStyle = '#fff'; ctx.fillRect(-L/2+3, -1, L-14, 2);
+    ctx.fillStyle = '#f8fafc'; ctx.fillRect(-L/2+3, -0.6, L-17, 1.2);
+  }
+  // barra de luzes no teto da cabine: metade vermelha, metade azul, alternando
+  const bx0 = L/2-9, bw = 2.6;
+  const cA = ativa ? (fase ? '#ff3b3b' : '#7f1d1d') : '#7f1d1d', cB = ativa ? (fase ? '#1e3a8a' : '#4aa3ff') : '#1e3a8a';
+  ctx.fillStyle = '#111827'; rr(bx0-0.6, -Wd/2+3.4, bw+1.2, Wd-6.8, 1); ctx.fill();
+  ctx.fillStyle = cA; rr(bx0, -Wd/2+3.9, bw, (Wd-7.8)/2, 0.7); ctx.fill();
+  ctx.fillStyle = cB; rr(bx0, 0.1, bw, (Wd-7.8)/2, 0.7); ctx.fill();
+  if (ativa) {
+    ctx.save(); ctx.globalCompositeOperation = 'lighter';
+    for (const [yy, rgb, on] of [[-Wd/4, '255,59,59', fase], [Wd/4, '74,163,255', !fase]]) {
+      if (!on) continue;
+      const gl = ctx.createRadialGradient(bx0+1.3, yy, 0, bx0+1.3, yy, 9);
+      gl.addColorStop(0, 'rgba(' + rgb + ',0.75)'); gl.addColorStop(1, 'rgba(' + rgb + ',0)');
+      ctx.fillStyle = gl; ctx.beginPath(); ctx.arc(bx0+1.3, yy, 9, 0, Math.PI*2); ctx.fill();
+    }
+    ctx.restore();
   }
   ctx.restore();
   // número da unidade: distintivo de tamanho fixo na tela, sobre a viatura
@@ -1576,16 +1610,6 @@ function desenharVeiculo(u) {
     ctx.fillStyle = '#111'; ctx.font = `bold ${6.5*zt()}px sans-serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     ctx.fillText(num, bx, by + 0.5*zt());
     ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
-  }
-  // luzes de emergência: piscam quando a unidade está em operação ou deslocamento
-  if (u.acao !== 'parado' || u.dest) {
-    const fase = Math.floor(performance.now() / 110) % 2;
-    const lx = u.x + 3*zt(), ly = u.y - 7*zt(), cor = fase ? '239,68,68' : '59,130,246';
-    ctx.save(); ctx.globalCompositeOperation = 'lighter';
-    const gl = ctx.createRadialGradient(lx, ly, 0, lx, ly, 7*zt());
-    gl.addColorStop(0, 'rgba(' + cor + ',0.7)'); gl.addColorStop(1, 'rgba(' + cor + ',0)');
-    ctx.fillStyle = gl; ctx.beginPath(); ctx.arc(lx, ly, 7*zt(), 0, Math.PI*2); ctx.fill(); ctx.restore();
-    ctx.fillStyle = 'rgba(' + cor + ',1)'; ctx.beginPath(); ctx.arc(lx, ly, 1.8*zt(), 0, Math.PI*2); ctx.fill();
   }
   // identificação
   ctx.font = `bold ${11*zt()}px sans-serif`; ctx.lineWidth = 3*k;
