@@ -60,6 +60,13 @@
   body.caso-andando #start { display:none; }
   body.caso-andando #secCaso.caso-baixo h2 { width:auto; }
   body.caso-andando #secCaso.caso-baixo { flex-wrap:nowrap; align-items:center; }
+  /* Administrador com caso em andamento: todo o painel passa para a parte inferior, em colunas */
+  body[data-papel="apresentador"].caso-andando #painel { left:60px; right:8px; top:auto; bottom:8px; width:auto; max-height:44vh; display:flex; flex-direction:row; align-items:flex-start; gap:14px; overflow-x:auto; overflow-y:auto; }
+  body[data-papel="apresentador"].caso-andando #painel section { flex:0 0 auto; width:270px; border-bottom:none; border-right:1px solid var(--borda,#3a4a63); padding:0 14px 0 0; margin:0; }
+  body[data-papel="apresentador"].caso-andando #painel section#secCaso { width:auto; min-width:150px; }
+  body[data-papel="apresentador"].caso-andando #painel section:last-child { border-right:none; }
+  body[data-papel="apresentador"].caso-andando #painel section:not(#secTwrAdm) .peq { display:none; }
+  body[data-papel="apresentador"].caso-andando #painel #secPortas #listaPortas, body[data-papel="apresentador"].caso-andando #painel { max-height:36vh; }
   /* Controles de mapa */
   #zoom { position:fixed; left:8px; top:84px; display:flex; flex-direction:column; gap:4px; z-index:2; }
   #zoom button { width:44px; padding:6px 0; text-align:center; font-size:13px; }
@@ -1949,6 +1956,7 @@ function atualizarUI() {
   $('pause').className = pausado ? 'ativo' : 'sec';
   const andando = estado === 'andamento';
   document.body.classList.toggle('caso-andando', andando);
+  posicionarCaso();
   $('start').disabled = andando;
   $('end').disabled = !andando;
   $('tipo').disabled = andando;
@@ -2061,12 +2069,19 @@ function gerarCodigo() {
 const estadoDoc = () => rede.doc('salas/' + sala);
 const comandosCol = () => rede.collection('comandos/' + sala + '/itens');
 
+// Onde fica o bloco "Caso": local/atendente e caso em andamento -> no painel; administrador antes de iniciar -> barra inferior
+function posicionarCaso() {
+  const sc = $('secCaso'), pn = $('painel'), baixo = papel === 'apresentador' && estado !== 'andamento';
+  if (baixo) { if (!sc.classList.contains('caso-baixo')) { sc.classList.add('caso-baixo'); document.body.appendChild(sc); } }
+  else if (sc.classList.contains('caso-baixo') || sc.parentNode !== pn) {
+    sc.classList.remove('caso-baixo');
+    if (papel === 'apresentador') pn.insertBefore(sc, pn.firstChild); else pn.insertBefore(sc, $('secOcorr'));
+  }
+}
 // Ajusta a interface ao papel: o atendente não vê as opções de criação do cenário
 function aplicarPapelUI() {
   document.body.dataset.papel = papel;
-  { const sc = $('secCaso'), pn = $('painel');
-    if (papel === 'apresentador') { sc.classList.add('caso-baixo'); document.body.appendChild(sc); }
-    else if (sc.classList.contains('caso-baixo')) { sc.classList.remove('caso-baixo'); pn.insertBefore(sc, $('secOcorr')); } }
+  posicionarCaso();
   if (papel === 'atendente') {
     $('msg').textContent = 'Aguardando o início do cenário pelo apresentador. Posicione viaturas e áreas e comande as ações.';
   }
