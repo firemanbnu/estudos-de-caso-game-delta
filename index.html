@@ -805,6 +805,11 @@ function tick(dt) {
       usou.add(u.id); combate = true;
       if (u.tanque <= 0) { u.tanque = 0; u.acao = 'parado'; $('msg').textContent = u.id + ' sem agente. Envie para reabastecer.'; }
     } else if (u.acao === 'aplicar' && u.tanque > 0) {
+      // se a viatura mudou de lugar, a espuma já lançada fica onde caiu e a nova começa na posição atual
+      if (u.ex !== undefined && Math.hypot(u.x - u.ex, u.y - u.ey) > 5) {
+        if (u.esp > 0) { espumasFix.push({ x:u.ex, y:u.ey, tec:u.tec, esp:u.esp, int:u.eint === undefined ? 1 : u.eint }); if (espumasFix.length > 14) espumasFix.shift(); }
+        u.ex = u.x; u.ey = u.y; u.esp = 0; u.eint = 1;
+      }
       const T = TECNICAS[u.tec] || TECNICAS.rolagem, g = geoEspuma(u);
       u.tanque -= dt * T.cons; u.esp = (u.esp || 0) + dt * T.vel; u.eint = Math.min(1, (u.eint === undefined ? 1 : u.eint) + dt * 0.1);
       usou.add(u.id); combate = true;
