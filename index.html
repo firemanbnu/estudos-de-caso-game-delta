@@ -223,6 +223,7 @@
     <button data-acao="proteger">Proteger</button>
     <button data-acao="aplicar">Aplicar espuma</button>
     <button data-acao="resgate">Resgatar passageiros</button>
+    <button data-acao="triagem">Triar vítimas</button>
     <button data-acao="atendimento">Atendimento médico</button>
     <button data-acao="espuma" class="sec">Espuma no combustível</button>
     <button data-acao="parado" class="sec">Parar</button>
@@ -352,7 +353,7 @@ const CATEGORIAS = {
 const TIPOS = {
   AB:  { nome:'CCI', ab:'CCI', cor:'#facc15', cab:'#ca8a04', tanque:40, taxa:12, vel:220, acoes:['parado','combate','proteger','aplicar'] },
   AP:  { nome:'CCI', ab:'CCI', cor:'#fde047', cab:'#ca8a04', tanque:25, taxa:6,  vel:280, acoes:['parado','combate','proteger','aplicar'] },
-  UR:  { nome:'CRS', ab:'CRS', cor:'#facc15', cab:'#ca8a04', vel:240, acoes:['parado','resgate'] },
+  UR:  { nome:'CRS', ab:'CRS', cor:'#facc15', cab:'#ca8a04', vel:240, acoes:['parado','resgate','triagem'] },
   AMB: { nome:'AMBULÂNCIA', ab:'AMBULÂNCIA', cor:'#f8fafc', cab:'#cbd5e1', vel:260, acoes:['parado','atendimento'] },
   CMD: { nome:'PCM', ab:'PCM', cor:'#7e22ce', cab:'#581c87', vel:300, acoes:['parado'] }
 };
@@ -365,14 +366,23 @@ const AREAS = {
 };
 const AREA_R = 45;
 // Triagem: três retângulos lado a lado (verde, amarelo, vermelho), deslocamentos em relação ao centro da área
-const TRI_RET = [{ dx:-34, cor:'#22c55e' }, { dx:0, cor:'#facc15' }, { dx:34, cor:'#ef4444' }];
+const TRI_RET = [{ dx:-51, cor:'#ef4444', cat:'R', nome:'grave' }, { dx:-17, cor:'#facc15', cat:'A', nome:'moderada' }, { dx:17, cor:'#22c55e', cat:'V', nome:'leve' }, { dx:51, cor:'#9ca3af', cat:'C', nome:'óbito' }];
+const ORDEM_REMOCAO = { R:0, A:1, V:2, C:3 };   // vermelhas, amarelas, verdes e por último as cinzas
 const RANGE = 100;      // alcance de atuação em relação à aeronave (unidades do mapa)
 // Técnicas de aplicação de espuma sobre o solo, em direção à aeronave
 const TECNICAS = {
   rolagem:  { nome:'Rolagem',  desc:'jato junto à viatura, varrendo da esquerda para a direita; a espuma nova empurra a anterior em direção à aeronave', alvoD:30, varre:12, larg:14, vel:7,  cons:1.2 },
-  anteparo: { nome:'Anteparo', desc:'jato dirigido a um ponto fixo à frente, a espuma cai e escorre para a aeronave', alvoD:0, varre:0,  larg:12, vel:5,  cons:0.9 },
-  diluvio:  { nome:'Dilúvio',  desc:'grande vazão em leque amplo, cobre uma faixa larga mais depressa e gasta mais agente', alvoD:40, varre:26, larg:30, vel:10, cons:2.2 }
+  anteparo: { nome:'Anteparo', desc:'o jato bate na fuselagem e a espuma escorre e se espalha pelo chão', alvoD:0, varre:0,  larg:12, vel:5,  cons:0.9 },
+  diluvio:  { nome:'Dilúvio',  desc:'o jato sobe ao céu e cai como chuva de espuma sobre a aeronave, espalhando-se pelo chão', alvoD:0, varre:0, larg:30, vel:10, cons:2.2 }
 };
+// medidas da aeronave em unidades do mapa e ponto da fuselagem atingido pelo jato de anteparo
+function medidasAero() { return { hl:(AE.spec.comp / M_POR_PX) / 2, hs:(AE.spec.env / M_POR_PX) / 2 }; }
+function pontoFuselagem(u) {
+  const a = aeroAtual(), c = Math.cos(a.h || 0), s = Math.sin(a.h || 0), dx = u.x - a.x, dy = u.y - a.y;
+  const lx = dx * c + dy * s, ly = -dx * s + dy * c, m = medidasAero();
+  const lx2 = clamp(lx, -m.hl * 0.7, m.hl * 0.7), ly2 = (ly >= 0 ? 1 : -1) * 1.2;
+  return { x: a.x + lx2 * c - ly2 * s, y: a.y + lx2 * s + ly2 * c, lx: lx2, ly: ly2, lado: ly >= 0 ? 1 : -1 };
+}
 // geometria da aplicação: direção da viatura à aeronave, origem da manta e alcance possível
 function geoEspuma(u) {
   const a = aeroAtual(), dx = a.x - u.x, dy = a.y - u.y, dist = Math.hypot(dx, dy) || 1;
@@ -380,7 +390,7 @@ function geoEspuma(u) {
   return { ux, uy, px:-uy, py:ux, ox:u.x + ux * o, oy:u.y + uy * o, alc, dist };
 }
 const ACAO_ROTULO = {
-  parado:'Parado', combate:'Apagar fogo', proteger:'Proteger aeronave', aplicar:'Aplicar espuma', espuma:'Espuma sobre combustível', resgate:'Resgatar passageiros',
+  parado:'Parado', combate:'Apagar fogo', proteger:'Proteger aeronave', triagem:'Triar vítimas', aplicar:'Aplicar espuma', espuma:'Espuma sobre combustível', resgate:'Resgatar passageiros',
   atendimento:'Atendimento médico', base:'Indo reabastecer', reab:'Reabastecendo', volta:'Retornando ao local'
 };
 const CASOS = {
@@ -565,7 +575,7 @@ function unidadeEm(p) {
 }
 // Formas: triagem e transporte são retângulos; concentração e demais áreas são círculos
 function dentroArea(a, p) {
-  if (a.tipo === 'TRI') return Math.abs(p.x - a.x) <= 52 && Math.abs(p.y - a.y) <= 13;
+  if (a.tipo === 'TRI') return Math.abs(p.x - a.x) <= 68 && Math.abs(p.y - a.y) <= 13;
   if (a.tipo === 'TRA') return Math.abs(p.x - a.x) <= 28 && Math.abs(p.y - a.y) <= 16;
   return DIST(a, p) <= a.r;
 }
@@ -600,6 +610,7 @@ function statusDe(u) {
   if (u.acao === 'reab') return 'Reabastecendo';
   if (u.acao === 'parado') return a ? 'Na área ' + a.id : 'Parado';
   if (!inc || estado !== 'andamento') return a ? 'Na área ' + a.id : 'Aguardando início do caso';
+  if (u.acao === 'triagem') return a && a.tipo === 'ACV' ? 'Triando vítimas na ' + a.id : 'Indo para a área de concentração';
   if (u.acao === 'aplicar') return u.tanque > 0 ? 'Aplicando espuma · ' + (TECNICAS[u.tec] ? TECNICAS[u.tec].nome : '') : 'Sem agente';
   if (u.acao === 'atendimento' && naAreaAT(u)) return 'Atuando: atendimento na área ' + a.id;
   if (DIST(u, inc) > RANGE) return 'Aguardando posicionamento na aeronave';
@@ -638,7 +649,7 @@ function encerrarCaso() {
     'Tempo decorrido: ' + mmss(tempo),
     'Fogo final: ' + Math.round(inc.fogo) + '% | Fumaça final: ' + Math.round(inc.fumaca) + '%',
     'Focos de fogo: ' + (inc.focos.map(f => f.nome).join(', ') || 'nenhum'),
-    'Passageiros: ' + inc.paxInicial + ' a bordo no início; ' + inc.evacuados + ' evacuados por escorregadeira, ' + inc.resgatados + ' resgatados, ' + inc.atendidos + ' atendidos, ' + inc.feridos + ' feridos.',
+    'Passageiros: ' + inc.paxInicial + ' a bordo no início; ' + inc.evacuados + ' evacuados por escorregadeira, ' + inc.resgatados + ' resgatados, ' + inc.atendidos + ' atendidos, ' + (inc.obitos || 0) + ' óbitos removidos, ' + inc.feridos + ' feridos.',
     'Viaturas de combate empregadas: ' + combatentes + ' (mínimo ilustrativo para a categoria ' + selCat.value + ': ' + cat.minVcis + ') — ' + (combatentes >= cat.minVcis ? 'conforme' : 'não conforme'),
     'Áreas montadas: ' + areas.length + ' | Unidades empregadas: ' + ([...usou].join(', ') || 'nenhuma')
   ].join('\n');
@@ -680,14 +691,21 @@ function tick(dt) {
   pessoas.forEach(q => { q.t += dt / 3; });
   pessoas = pessoas.filter(q => q.t < 1);
   for (const q of caminhantes) {
-    const crs = unidadePorId(q.crs);
-    if (crs) q.alvo = pontoReuniao(crs, q);
-    if (!q.alvo) continue;
-    const dx = q.alvo.x - q.x, dy = q.alvo.y - q.y, d = Math.hypot(dx, dy), passo = 22 * dt;
+    // sem área de concentração criada, a pessoa espera perto da aeronave; com ela, segue para lá
+    let alvo = null;
+    const acvs = areas.filter(x => x.tipo === 'ACV');
+    if (q.est === 'triado') alvo = { x:q.tx, y:q.ty };
+    else if (acvs.length) {
+      const acv = acvs.reduce((m, x) => Math.hypot(x.x - q.x, x.y - q.y) < Math.hypot(m.x - q.x, m.y - q.y) ? x : m);
+      alvo = { x:acv.x + q.rx * acv.r * 0.75, y:acv.y + q.ry * acv.r * 0.75 };
+      if (q.est !== 'acv') q.est = 'rumo';
+    } else { alvo = { x:q.wx, y:q.wy }; q.est = 'espera'; }
+    const dx = alvo.x - q.x, dy = alvo.y - q.y, d = Math.hypot(dx, dy), passo = 22 * dt;
     if (d <= passo) {
-      q.x = q.alvo.x; q.y = q.alvo.y;
-      if (!q.chegou) { q.chegou = true; if (inc) inc.resgatados++; }
-    } else { q.x += dx / d * passo; q.y += dy / d * passo; }
+      q.x = alvo.x; q.y = alvo.y;
+      if (q.est === 'rumo') q.est = 'acv';
+      if (q.est === 'triado') q.na = true;
+    } else { q.x += dx / d * passo; q.y += dy / d * passo; if (q.est === 'acv') q.est = 'rumo'; }
   }
   const ativo = estado === 'andamento' && inc;
   if (ativo) tempo += dt;
@@ -749,7 +767,7 @@ function tick(dt) {
       const T = TECNICAS[u.tec] || TECNICAS.rolagem, g = geoEspuma(u);
       u.tanque -= dt * T.cons; u.esp = (u.esp || 0) + dt * T.vel;
       usou.add(u.id); combate = true;
-      if (u.esp >= g.alc) inc.fumaca -= 1.2 * dt;   // a manta chegou à aeronave
+      if (u.esp >= (u.tec === 'rolagem' ? g.alc : 6)) inc.fumaca -= 1.2 * dt;   // a espuma chegou à aeronave
       if (u.tanque <= 0) { u.tanque = 0; u.acao = 'parado'; $('msg').textContent = u.id + ' sem agente. Envie para reabastecer.'; }
     } else if (u.acao === 'proteger' && emCena && u.tanque > 0) {
       u.tanque -= dt * (u.vazao === 'baixa' ? 0.5 : 1);
@@ -762,15 +780,43 @@ function tick(dt) {
         // sai pela porta mais próxima do CRS e segue andando até a área de reunião
         let d0 = null, dm = Infinity;
         for (const pt of portas) { const w = aeroParaMundo(pt.lx, pt.ly), d = Math.hypot(w.x - u.x, w.y - u.y); if (d < dm) { dm = d; d0 = w; } }
-        if (d0) caminhantes.push({ x:d0.x, y:d0.y, crs:u.id, ox:(Math.random() - 0.5) * 8, oy:(Math.random() - 0.5) * 6, chegou:false });
-        else inc.resgatados++;
+        const r0 = Math.random(), cat = r0 < 0.15 ? 'R' : r0 < 0.40 ? 'A' : r0 < 0.92 ? 'V' : 'C';
+        if (d0) {
+          const ox = d0.x - inc.x, oy = d0.y - inc.y, on = Math.hypot(ox, oy) || 1, ang = Math.random() * Math.PI * 2, rr = Math.sqrt(Math.random());
+          caminhantes.push({ x:d0.x, y:d0.y, cat, est:'espera', wx:d0.x + ox / on * 9 + (Math.random() - 0.5) * 6, wy:d0.y + oy / on * 9 + (Math.random() - 0.5) * 6, rx:Math.cos(ang) * rr, ry:Math.sin(ang) * rr });
+        }
+        inc.resgatados++;
       }
-    } else if (u.acao === 'atendimento' && inc.resgatados > 0 && (emCena || naAreaAT(u))) {
-      u.prog += dt; usou.add(u.id);
-      if (u.prog >= 5) {
-        u.prog = 0; inc.resgatados--; inc.atendidos++;
-        const i = caminhantes.findIndex(q => q.chegou); if (i >= 0) caminhantes.splice(i, 1);
+    } else if (u.acao === 'triagem') {
+      // o CRS na ACV tria uma vítima por vez e a leva à lona da cor correspondente na área de triagem
+      const acv = areaPorId(u.area), tri = areas.find(x => x.tipo === 'TRI');
+      if (!tri) { u.acao = 'parado'; $('msg').textContent = 'Crie a área de triagem para o CRS distribuir as vítimas.'; }
+      else if (acv && acv.tipo === 'ACV' && DIST(u, acv) <= acv.r) {
+        const q = caminhantes.find(v => v.est === 'acv');
+        if (q) {
+          u.prog += dt; usou.add(u.id);
+          if (u.prog >= 4) {
+            u.prog = 0;
+            const rt = TRI_RET.find(r => r.cat === q.cat);
+            q.est = 'triado'; q.na = false;
+            q.tx = tri.x + rt.dx + (Math.random() - 0.5) * 24; q.ty = tri.y + (Math.random() - 0.5) * 16;
+          }
+        } else u.prog = 0;
       }
+    } else if (u.acao === 'atendimento' && inc.resgatados > 0) {
+      // a ambulância remove as vítimas triadas por prioridade: vermelha, amarela, verde e, por último, cinza
+      const tri = areas.some(x => x.tipo === 'TRI');
+      const ta = areaPorId(u.area), noLocal = emCena || naAreaAT(u) || (ta && ta.tipo === 'TRI' && dentroArea(ta, u));
+      let cand = caminhantes.filter(v => tri ? (v.est === 'triado' && v.na) : v.est === 'acv');
+      if (noLocal && cand.length) {
+        cand.sort((x, y) => (ORDEM_REMOCAO[x.cat] ?? 9) - (ORDEM_REMOCAO[y.cat] ?? 9));
+        u.prog += dt; usou.add(u.id);
+        if (u.prog >= 5) {
+          u.prog = 0; inc.resgatados--;
+          if (cand[0].cat === 'C') inc.obitos = (inc.obitos || 0) + 1; else inc.atendidos++;
+          caminhantes.splice(caminhantes.indexOf(cand[0]), 1);
+        }
+      } else u.prog = 0;
     } else if (u.acao !== 'resgate') {
       u.prog = 0;
     }
@@ -1124,11 +1170,59 @@ function desenharJatos() {
       jatoAte(u, alvo.x, alvo.y, u.vazao === 'baixa');
     } else if (u.acao === 'aplicar' && inc) {
       const T = TECNICAS[u.tec] || TECNICAS.rolagem, g = geoEspuma(u);
-      const d = T.alvoD || Math.max(40, g.alc * 0.6);
-      const lat = Math.sin(t * 1.8) * T.varre;
-      jatoAte(u, u.x + g.ux * d + g.px * lat, u.y + g.uy * d + g.py * lat, false, true);
+      if (u.tec === 'anteparo') {
+        const H = pontoFuselagem(u);
+        jatoAte(u, H.x, H.y, false, true);
+      } else if (u.tec === 'diluvio') {
+        const a = aeroAtual(), bx = u.x + g.ux * 14 * zt(), by = u.y + g.uy * 14 * zt(), N = 34, k = 1 / cam.s;
+        for (let i = 0; i < N; i++) {
+          const sN = (t * 0.8 + i / N) % 1, x = bx + (a.x - bx) * sN, y = by + (a.y - by) * sN - 4 * sN * (1 - sN) * 26;
+          ctx.fillStyle = i % 3 === 0 ? 'rgba(255,255,255,0.95)' : 'rgba(255,250,235,0.85)';
+          ctx.beginPath(); ctx.arc(x, y, (1.2 + (i % 3) * 0.5) * k * 1.4, 0, Math.PI * 2); ctx.fill();
+        }
+        // chuva de espuma caindo sobre a aeronave
+        const m = medidasAero(), c = Math.cos(a.h || 0), sn = Math.sin(a.h || 0);
+        for (let i = 0; i < 70; i++) {
+          const h1 = Math.abs(Math.sin(i * 12.9898) * 43758.5453) % 1, h2 = Math.abs(Math.sin(i * 78.233) * 24634.63) % 1, h3 = Math.abs(Math.sin(i * 3.31) * 9631.17) % 1;
+          const r = Math.sqrt(h1), ang = h2 * Math.PI * 2, lx = Math.cos(ang) * r * (m.hl + 3), ly = Math.sin(ang) * r * (m.hs * 0.85 + 2);
+          const x = a.x + lx * c - ly * sn, y = a.y + lx * sn + ly * c, f = (t * 1.3 + h3) % 1;
+          ctx.globalAlpha = 0.9 * (1 - f * 0.4); ctx.strokeStyle = 'rgba(255,255,250,1)'; ctx.lineWidth = 0.8 * k * 1.4;
+          ctx.beginPath(); ctx.moveTo(x, y - 16 * (1 - f)); ctx.lineTo(x, y - 16 * (1 - f) + 3); ctx.stroke();
+        }
+        ctx.globalAlpha = 1;
+      } else {
+        const d = T.alvoD, lat = Math.sin(t * 1.8) * T.varre;
+        jatoAte(u, u.x + g.ux * d + g.px * lat, u.y + g.uy * d + g.py * lat, false, true);
+      }
     }
   }
+}
+// Anteparo: a espuma escorre da fuselagem e se espalha pelo chão do lado da viatura. Dilúvio: cobre toda a aeronave e o chão ao redor.
+function espumaSobreAero(u, T, t) {
+  const a = aeroAtual(), c = Math.cos(a.h || 0), sn = Math.sin(a.h || 0), m = medidasAero();
+  const dil = u.tec === 'diluvio';
+  const f = dil ? Math.min(1, u.esp / 40) : Math.min(1, u.esp / 30);
+  if (f <= 0.02) return;
+  const H = dil ? null : pontoFuselagem(u);
+  const n = Math.floor((dil ? 700 : 320) * f) + 10;
+  ctx.save();
+  for (let i = 0; i < n; i++) {
+    const h1 = Math.abs(Math.sin(i * 12.9898 + 78.233) * 43758.5453) % 1, h2 = Math.abs(Math.sin(i * 39.346 + 11.135) * 24634.6345) % 1, h3 = Math.abs(Math.sin(i * 7.13 + 3.7) * 9631.17) % 1;
+    let lx, ly;
+    if (dil) {
+      const r = Math.sqrt(h1) * f, ang = h2 * Math.PI * 2;
+      lx = Math.cos(ang) * r * (m.hl + 3); ly = Math.sin(ang) * r * (m.hs * 0.85 + 2);
+    } else {
+      const R = Math.min(18, 18 * f);
+      lx = H.lx + (h1 - 0.5) * 2 * R * 1.5; ly = H.lado * (1.2 + h2 * h2 * R);
+      if (Math.abs(lx) > m.hl + 3) continue;
+    }
+    const x = a.x + lx * c - ly * sn, y = a.y + lx * sn + ly * c;
+    ctx.globalAlpha = dil ? 0.22 + 0.22 * h3 : 0.4 + 0.35 * h3;
+    ctx.fillStyle = i % 4 === 0 ? 'rgba(226,240,250,1)' : 'rgba(255,255,250,1)';
+    ctx.beginPath(); ctx.arc(x, y, dil ? 0.7 + h3 * 0.8 : 0.9 + h3 * 1.1, 0, Math.PI * 2); ctx.fill();
+  }
+  ctx.restore();
 }
 // Manta de espuma no solo: cresce da viatura em direção à aeronave e é empurrada pela espuma nova
 function desenharEspuma() {
@@ -1137,6 +1231,7 @@ function desenharEspuma() {
   for (const u of unidades) {
     if (u.acao !== 'aplicar' && !(u.esp > 0)) continue;
     const T = TECNICAS[u.tec]; if (!T || !(u.esp > 0)) continue;
+    if (u.tec === 'anteparo' || u.tec === 'diluvio') { espumaSobreAero(u, T, t); continue; }
     const g = geoEspuma(u), L = Math.min(u.esp, g.alc);
     if (L < 1) continue;
     const w0 = T.larg * 0.55, w1 = T.larg * 0.5;
@@ -1165,6 +1260,14 @@ function desenharEspuma() {
 }
 // Comando de ação: se há caso em andamento, a viatura já se posiciona no alcance da aeronave
 function comandarAcao(u, act) {
+  if (act === 'triagem') {
+    const acv = areas.find(x => x.tipo === 'ACV');
+    if (!acv) { $('msg').textContent = 'Crie a área de concentração de vítimas para triar.'; return; }
+    if (!areas.some(x => x.tipo === 'TRI')) { $('msg').textContent = 'Crie também a área de triagem para distribuir as vítimas nas lonas.'; return; }
+    executar({ tipo:'triar', id:u.id, areaId:acv.id });
+    $('msg').textContent = u.id + ': triar as vítimas da ' + acv.id + ' e levar às lonas (vermelha, amarela, verde e cinza).';
+    return;
+  }
   if (act === 'combate') {
     // Apagar fogo: a viatura não sai do lugar, apenas lança água se o foco estiver ao alcance
     executar({ tipo:'acao', id:u.id, acao:'combate' });
@@ -1240,9 +1343,10 @@ function desenharPessoas() {
   }
   // passageiros guiados pelo CRS: andam da aeronave até a área de reunião atrás do CRS, perto do PCM
   for (const q of caminhantes) {
+    const cor = { R:'#ef4444', A:'#facc15', V:'#22c55e', C:'#9ca3af' }[q.cat];
     ctx.strokeStyle = 'rgba(0,0,0,0.7)'; ctx.lineWidth = k;
     ctx.fillStyle = '#fde68a'; ctx.beginPath(); ctx.arc(q.x, q.y - 0.8, 0.5, 0, Math.PI*2); ctx.fill(); ctx.stroke();
-    ctx.fillStyle = q.chegou ? '#22c55e' : '#f59e0b'; ctx.fillRect(q.x - 0.6, q.y - 0.3, 1.2, 1.5);
+    ctx.fillStyle = q.est === 'triado' && cor ? cor : (q.est === 'acv' ? '#22c55e' : '#f59e0b'); ctx.fillRect(q.x - 0.6, q.y - 0.3, 1.2, 1.5);
   }
 }
 function atualizarPortas() {
@@ -1456,6 +1560,8 @@ function desenhar() {
     if (a.tipo === 'TRI') {
       for (const q of TRI_RET) {
         const x = a.x + q.dx - 16, y = a.y - 11.2;
+        const nq = caminhantes.filter(v => v.est === 'triado' && v.cat === q.cat).length;
+        if (nq) { ctx.fillStyle = '#fff'; ctx.strokeStyle = 'rgba(0,0,0,0.75)'; ctx.lineWidth = 3*k; txt(String(nq), x + 13*zt(), y - 3*zt()); }
         ctx.globalAlpha = 0.5; ctx.fillStyle = q.cor; ctx.fillRect(x, y, 32, 22.4); ctx.globalAlpha = 1;
         ctx.strokeStyle = sel ? '#fff' : q.cor; ctx.lineWidth = (sel ? 2.5 : 1.5)*k; ctx.strokeRect(x, y, 32, 22.4);
       }
@@ -2208,6 +2314,11 @@ function aplicarComando(c, local) {
         u.area = null; u.acao = 'base'; u.dest = { x:ABAST.x, y:ABAST.y }; u.rota = rotaPelasRuas(u, ABAST); u.prog = 0;
       }
       break;
+    case 'triar': {
+      const a = areaPorId(c.areaId);
+      if (u && a && estado === 'andamento') { enviarArea(u, a); u.acao = 'triagem'; u.prog = 0; }
+      break;
+    }
     case 'proteger':
       if (u && estado === 'andamento' && u.tanque > 0) { u.acao = 'proteger'; u.vazao = c.vazao === 'baixa' ? 'baixa' : 'alta'; u.prog = 0; }
       break;
@@ -2313,7 +2424,7 @@ function snapshotEstado() {
     s.caso = selTipo.value;
     s.inc = { ...inc, focos: inc.focos.map(f => ({ lx:f.lx, ly:f.ly, nome:f.nome })) };
     s.pessoas = pessoas.map(q => ({ porta:q.porta, t:q.t }));
-    s.caminhantes = caminhantes.map(q => ({ x:q.x, y:q.y, chegou:q.chegou }));
+    s.caminhantes = caminhantes.map(q => ({ ...q }));
     s.aero = AE.spec;
     s.portas = portas.map(p => ({ id:p.id, armada:p.armada }));
     s.usou = [...usou];
