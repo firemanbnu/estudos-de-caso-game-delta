@@ -75,6 +75,16 @@
   /* Papéis: o atendente não vê as opções de criação do cenário */
   body[data-papel="atendente"] .so-admin { display:none !important; }
   body[data-papel="apresentador"] .so-atendente { display:none !important; }
+  /* funções do atendente: chefe de equipe (tudo, prioridade nos CCI) e líder de resgate (somente o resgate) */
+  .so-chefe, .so-resgate { display:none; }
+  body[data-funcao="todos"] .so-chefe, body[data-funcao="chefe"] .so-chefe { display:block; }
+  body[data-funcao="todos"] .so-resgate, body[data-funcao="resgate"] .so-resgate { display:block; }
+  body[data-papel="apresentador"] .so-chefe, body[data-papel="apresentador"] .so-resgate { display:none !important; }
+  body[data-funcao="resgate"] #barra [data-add="AB"], body[data-funcao="resgate"] #barra [data-add="AP"], body[data-funcao="resgate"] #barra [data-add="CMD"],
+  body[data-funcao="resgate"] #barra [data-add="CC"], body[data-funcao="resgate"] #barra [data-add="RE"] { display:none; }
+  #alertaLR { position:fixed; top:176px; left:50%; transform:translateX(-50%); z-index:7; max-width:min(560px,92vw); background:rgba(154,52,18,.96); border:2px solid #fb923c; border-radius:12px; padding:10px 14px; font-size:14px; box-shadow:0 8px 28px rgba(0,0,0,.5); display:none; animation:pisca 1.2s ease-in-out infinite; }
+  @keyframes pisca { 50% { box-shadow:0 0 0 6px rgba(251,146,60,.35); } }
+  #alertaLR b { color:#fed7aa; }
   /* o administrador não comanda viaturas: só o atendente */
   body[data-papel="apresentador"] #barra, body[data-papel="apresentador"] #menuUnid { display:none !important; }
   canvas { touch-action:none; }
@@ -165,14 +175,16 @@
 <div id="entrada" style="position:fixed;inset:0;background:rgba(15,23,42,0.92);z-index:10;display:flex;align-items:center;justify-content:center;">
   <div style="background:#1e293b;padding:20px;border-radius:12px;width:min(400px,92vw);">
     <h2 style="font-size:17px;margin:0 0 8px">Modo de uso</h2>
-    <p class="peq">Criar sala: você é o apresentador. Gera um código para o atendente entrar e comanda o cenário.<br>Entrar como atendente: digite o código recebido. Você comanda viaturas, áreas e ações no seu computador.<br>Modo local: tudo no seu computador, sem sincronização.</p>
+    <p class="peq">Criar sala: você é o apresentador. Gera um código para o atendente entrar e comanda o cenário.<br>Chefe de equipe: comanda tudo, com prioridade nos CCI, e pode fazer pedidos ao líder de resgate.<br>Líder de resgate: comanda só o resgate (CRS, ambulância, área de concentração, triagem e transporte).<br>Modo local: tudo no seu computador, sem sincronização.</p>
     <div class="linha"><button id="modoAp">Criar sala (apresentador)</button></div>
-    <div class="linha"><input id="codEntrada" placeholder="Código da sala" maxlength="6" style="width:150px;text-transform:uppercase"><button id="modoAt" class="sec">Entrar como atendente</button></div>
+    <div class="linha"><input id="codEntrada" placeholder="Código da sala" maxlength="6" style="width:150px;text-transform:uppercase"></div>
+    <div class="linha"><button id="modoChefe" class="sec">Entrar como chefe de equipe</button><button id="modoLider" class="sec">Entrar como líder de resgate</button></div>
     <div class="linha"><button id="modoLocal" class="sec">Modo local (sem sala)</button></div>
     <p class="peq" id="entradaMsg"></p>
   </div>
 </div>
 <canvas id="c"></canvas>
+<div id="alertaLR"></div>
 
 <div id="hud">
   <span class="stat essencial">Tempo <b id="time">00:00</b></span>
@@ -322,7 +334,20 @@
     <p class="peq">Escorregadeira armada aparece no mapa. Passageiros só descem com a aeronave parada. Fogo perto da porta a bloqueia (em vermelho).</p>
   </section>
 
-  <section id="secTwr" class="so-atendente">
+  <section id="secPedLR" class="so-atendente so-chefe">
+    <h2>Pedido ao líder de resgate</h2>
+    <p class="peq">Escreva o que você quer do resgate. O líder recebe um alerta na tela dele.</p>
+    <textarea id="pedLRtxt" rows="2" style="width:100%" placeholder="Ex.: montar a área de concentração de vítimas ao lado da torre"></textarea>
+    <div class="linha"><button id="pedLRenv">Enviar ao líder</button></div>
+    <div id="pedLRlista" class="peq"></div>
+  </section>
+
+  <section id="secPedChefe" class="so-atendente so-resgate">
+    <h2>Pedidos do chefe de equipe</h2>
+    <div id="pedChefeLista" class="peq">Nenhum pedido do chefe.</div>
+  </section>
+
+  <section id="secTwr" class="so-atendente so-chefe">
     <h2>TWR (controle)</h2>
     <p class="peq">Solicite informações ao controle. O administrador responde com os dados do caso.</p>
     <div class="linha">
@@ -541,6 +566,7 @@ let pessoas = [];   // passageiros descendo pelas escorregadeiras
 let caminhantes = []; // passageiros que andam até a área de reunião atrás do CRS
 let rosterKey = '', selKey = '', barraKey = '';
 let twrPedidos = [];   // pedidos recebidos da TWR (apenas o administrador responde)
+let pedidosLR = [];  // pedidos escritos do chefe de equipe ao líder de resgate: { id, texto, feito }
 let twrRespostas = []; // respostas já liberadas ao atendente (enviadas no estado)
 let twrKey = '', twrRespKey = '';
 
@@ -568,7 +594,7 @@ function unidadeEm(p) {
   // Tolerância em pixels de tela (dedo ou mouse). Vence a viatura cujo centro está mais perto do toque;
   // se ela já está selecionada e há outra muito próxima, o toque seguinte alterna para a vizinha.
   const tol = (matchMedia('(pointer:coarse)').matches ? 22 : 15) / cam.s;
-  const cands = unidades.map(u => ({ u, d:DIST(u, p) })).filter(c => c.d <= tol).sort((a, b) => a.d - b.d);
+  const cands = unidades.filter(u => !(funcao === 'resgate' && papel === 'atendente' && (u.tipo === 'AB' || u.tipo === 'AP' || u.tipo === 'CMD'))).map(u => ({ u, d:DIST(u, p) })).filter(c => c.d <= tol).sort((a, b) => a.d - b.d);
   if (!cands.length) return null;
   if (cands.length > 1 && cands[0].u.id === selId) return cands[1].u;
   return cands[0].u;
@@ -631,7 +657,7 @@ function iniciarCaso() {
   inc = { x, y, h:h0, pi:1, movendo: trajeto.length > 1, parou:false, fogo:caso.fogo, fumaca:caso.fumaca, pax:fichaCaso().pax, paxInicial:fichaCaso().pax, feridos:0, resgatados:0, atendidos:0, evacuados:0, dangerT:0, ventoDeg:-135, ventoNome:'NO', fumAreaK:1 };
   modoTrajeto = false;
   inc.focos = ajustarFocosAero(localizarFocos(desc, selTipo.value));
-  pessoas = []; caminhantes = [];
+  pessoas = []; caminhantes = []; pedidosLR = [];
   tempo = 0; usou = new Set();
   // As viaturas mantêm a posição e a ação que o atendente preparou antes do início
   unidades.forEach(u => { u.tanque = TIPOS[u.tipo].tanque || 0; u.prog = 0; u.reab = 0; });
@@ -2041,6 +2067,7 @@ function atualizarRoster() {
   const r = $('roster'); r.innerHTML = '';
   if (!unidades.length && !areas.length) r.innerHTML = '<p class="peq">Nada no mapa ainda.</p>';
   unidades.forEach(u => {
+    if (funcao === 'resgate' && papel === 'atendente' && (u.tipo === 'AB' || u.tipo === 'AP' || u.tipo === 'CMD')) return;
     const d = document.createElement('div');
     d.className = 'row' + (u.id === selId ? ' sel' : '');
     d.dataset.id = u.id;
@@ -2219,7 +2246,32 @@ function atualizarTwr() {
       ? twrRespostas.map(r => '<div style="margin:3px 0"><b>' + esc(TWR_ROTULO[r.item]) + ':</b> ' + esc(r.texto) + '</div>').join('')
       : 'Nenhuma resposta da TWR ainda.';
   }
+  atualizarPedidosLR();
 }
+// Pedidos do chefe ao líder de resgate: o líder recebe um alerta e marca como feito
+let pedLRKey = '', pedLRVistos = null;
+function atualizarPedidosLR() {
+  const k = pedidosLR.map(p => p.id + p.feito).join(',');
+  if (k === pedLRKey) return;
+  pedLRKey = k;
+  const pend = pedidosLR.filter(p => !p.feito);
+  $('pedLRlista').innerHTML = pedidosLR.length ? pedidosLR.map(p => '<div style="margin:3px 0">' + (p.feito ? '✔ ' : '⏳ ') + esc(p.texto) + (p.feito ? ' <i>(feito)</i>' : ' <i>(aguardando o líder)</i>') + '</div>').join('') : '';
+  $('pedChefeLista').innerHTML = pedidosLR.length ? pedidosLR.map(p => '<div style="margin:5px 0">' + (p.feito ? '✔ ' : '<b>⚠</b> ') + esc(p.texto) + (p.feito ? '' : ' <button class="sec" data-ok="' + p.id + '">Feito</button>')  + '</div>').join('') : 'Nenhum pedido do chefe.';
+  const ve = funcao === 'resgate' || papel === 'local';
+  const al = $('alertaLR');
+  if (ve && pend.length) {
+    const ult = pend[pend.length - 1];
+    al.innerHTML = '<b>Pedido do chefe de equipe:</b> ' + esc(ult.texto) + (pend.length > 1 ? ' <i>(+' + (pend.length - 1) + ' pendente(s))</i>' : '') + '<div style="margin-top:6px"><button data-ok="' + ult.id + '">Feito</button></div>';
+    al.style.display = 'block';
+  } else al.style.display = 'none';
+}
+$('pedLRenv').onclick = () => {
+  const t = $('pedLRtxt').value.trim(); if (!t) return;
+  executar({ tipo:'pedLR', rid:'r' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), texto:t });
+  $('pedLRtxt').value = '';
+  $('msg').textContent = 'Pedido enviado ao líder de resgate.';
+};
+document.addEventListener('click', e => { const b = e.target.closest('[data-ok]'); if (b) executar({ tipo:'pedLRok', rid:b.dataset.ok }); });
 $('twrPedidosList').addEventListener('click', e => {
   const b = e.target.closest('[data-resp]'); if (b) responderTWR(b.dataset.resp);
 });
@@ -2231,6 +2283,7 @@ document.querySelectorAll('[data-pedido]').forEach(b => b.onclick = () => {
 // ---------- Sincronização entre apresentador e atendente ----------
 // O apresentador roda a simulação e publica o estado em "sala/estado".
 // O atendente recebe esse estado e envia comandos em "comandos", que o apresentador aplica.
+let funcao = null;             // chefe | resgate (somente para o atendente)
 let papel = 'local';           // local | apresentador | atendente
 let rede = null;               // espaço de dados compartilhado (db)
 const processados = new Set();
@@ -2261,9 +2314,10 @@ function posicionarCaso() {
 // Ajusta a interface ao papel: o atendente não vê as opções de criação do cenário
 function aplicarPapelUI() {
   document.body.dataset.papel = papel;
+  document.body.dataset.funcao = papel === 'atendente' ? (funcao || 'chefe') : 'todos';
   posicionarCaso();
   if (papel === 'atendente') {
-    $('msg').textContent = 'Aguardando o início do cenário pelo apresentador. Posicione viaturas e áreas e comande as ações.';
+    $('msg').textContent = funcao === 'resgate' ? 'Líder de resgate: aguardando o início do cenário. Monte a área de concentração de vítimas, a triagem e comande o CRS e a ambulância.' : 'Chefe de equipe: aguardando o início do cenário. Posicione os CCI, as áreas e comande as ações.';
   }
 }
 
@@ -2275,7 +2329,16 @@ function dadosDe(x) {
 }
 
 // Atendente: envia o comando ao apresentador. Local/apresentador: aplica na hora.
+const RESTRITO_CHEFE = ['AB', 'AP', 'CMD', 'CC', 'RE'];
+function restritoAoChefe(c) {
+  const u = c.id ? unidadePorId(c.id) : null;
+  return (u && (u.tipo === 'AB' || u.tipo === 'AP' || u.tipo === 'CMD')) || (c.tipo === 'add' && RESTRITO_CHEFE.includes(c.item));
+}
 function executar(c) {
+  if (funcao === 'resgate' && papel === 'atendente') {
+    if (restritoAoChefe(c)) { $('msg').textContent = 'Os CCI, o PCM e as áreas de combate são do chefe de equipe. Faça o pedido a ele.'; return; }
+    c = { ...c, func:'resgate' };
+  }
   if (c.tipo === 'pedido' && !c.rid) c = { ...c, rid: 'p' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7) };
   if (papel === 'atendente' && rede) {
     const id = 'c' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
@@ -2288,6 +2351,7 @@ function executar(c) {
 
 function aplicarComando(c, local) {
   const u = c.id ? unidadePorId(c.id) : null;
+  if (c.func === 'resgate' && restritoAoChefe(c)) return;
   if (u && ['destino','mover','ataque','area','sair','espuma'].includes(c.tipo)) { u.rota = null; u.origem = null; }
   if (u && c.tipo === 'acao' && c.acao === 'parado') { u.rota = null; u.origem = null; }
   switch (c.tipo) {
@@ -2396,6 +2460,13 @@ function aplicarComando(c, local) {
       else if (c.acao === 'area-') inc.fumAreaK = Math.max(0.5, (inc.fumAreaK || 1) - 0.25);
       else if (c.acao === 'vento') { inc.ventoDeg = c.valor; inc.ventoNome = c.nome; }
       break;
+    case 'pedLR':
+      if (c.rid && c.texto && !pedidosLR.some(p => p.id === c.rid)) pedidosLR.push({ id:c.rid, texto:String(c.texto).slice(0, 300), feito:false });
+      break;
+    case 'pedLRok': {
+      const p = pedidosLR.find(x => x.id === c.rid); if (p) p.feito = true;
+      break;
+    }
     case 'pedido':
       if (c.rid && !twrPedidos.some(p => p.id === c.rid)) twrPedidos.push({ id:c.rid, item:c.item, status:'pendente' });
       break;
@@ -2418,7 +2489,8 @@ function snapshotEstado() {
     areas: areas.map(a => ({ ...a })),
     base: { x:BASE.x, y:BASE.y },
     abast: { x:ABAST.x, y:ABAST.y },
-    twrRespostas: twrRespostas.map(r => ({ ...r }))
+    twrRespostas: twrRespostas.map(r => ({ ...r })),
+    pedidosLR: pedidosLR.map(r => ({ ...r }))
   };
   if (estado !== 'preparo' && inc) {
     s.caso = selTipo.value;
@@ -2454,6 +2526,7 @@ function aplicarEstado(s) {
   aplicarUnidades(s.unidades);
   areas = s.areas || [];
   twrRespostas = s.twrRespostas || [];
+  pedidosLR = s.pedidosLR || [];
   ocorrencias = s.ocorrencias || [];
   usou = new Set(s.usou || []);
   if (s.base) aplicarBase(s.base);
@@ -2569,12 +2642,13 @@ $('copiarSala').onclick = () => {
   $('msg').textContent = 'Link da sala ' + sala + ': ' + url + ' (o atendente também pode digitar o código).';
 };
 $('modoAp').onclick = () => entrarSala('apresentador');
-$('modoAt').onclick = () => entrarSala('atendente');
+$('modoChefe').onclick = () => { funcao = 'chefe'; entrarSala('atendente'); };
+$('modoLider').onclick = () => { funcao = 'resgate'; entrarSala('atendente'); };
 $('modoLocal').onclick = () => entrarSala('local');
 // Link com o código já preenchido (#sala=CODIGO)
 (function () {
   const m = location.hash.match(/sala=([A-Za-z0-9]{6})/);
-  if (m) { $('codEntrada').value = m[1].toUpperCase(); $('entradaMsg').textContent = 'Código da sala preenchido. Clique em "Entrar como atendente".'; }
+  if (m) { $('codEntrada').value = m[1].toUpperCase(); $('entradaMsg').textContent = 'Código da sala preenchido. Escolha entrar como chefe de equipe ou líder de resgate.'; }
 })();
 
 // ---------- Laço principal ----------
