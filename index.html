@@ -1261,7 +1261,8 @@ function desenharEspuma(sobre) {
   for (const u of unidades) {
     if (u.acao !== 'aplicar' && !(u.esp > 0)) continue;
     const T = TECNICAS[u.tec]; if (!T || !(u.esp > 0)) continue;
-    if ((u.tec === 'diluvio') !== !!sobre) continue;   // rolagem e anteparo ficam no solo, por baixo da aeronave; o dilúvio cai por cima
+    // rolagem e anteparo ficam no solo, por baixo da aeronave; o dilúvio cai por cima enquanto aplica e, ao parar, escorre para o solo ao redor dela
+    if ((u.tec === 'diluvio' && u.acao === 'aplicar') !== !!sobre) continue;
     if (u.tec === 'anteparo' || u.tec === 'diluvio') { espumaSobreAero(u, T, t); continue; }
     const g = geoEspuma(u), L = Math.min(u.esp, g.alc);
     if (L < 1) continue;
