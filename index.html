@@ -665,7 +665,7 @@ function iniciarCaso() {
   tempo = 0; usou = new Set();
   // As viaturas mantêm a posição e a ação que o atendente preparou antes do início
   unidades.forEach(u => { u.tanque = TIPOS[u.tipo].tanque || 0; u.prog = 0; u.reab = 0; });
-  estado = 'andamento'; pausado = false;
+  estado = 'andamento'; pausado = false; espumasFix = [];
   const nomesFoco = inc.focos.map(f => f.nome).join(', ');
   $('msg').textContent = 'Caso iniciado: ' + caso.nome + '.' + (nomesFoco ? ' Fogo localizado em: ' + nomesFoco + '.' : ' Sem fogo localizado.') + ' Posicione e comande as unidades.';
 }
@@ -716,7 +716,18 @@ function pontoReuniao(crs, q) {
   if (pcm) { x += (pcm.x - x) * 0.5; y += (pcm.y - y) * 0.5; }
   return { x: x + (q.ox || 0), y: y + (q.oy || 0) };
 }
+function decairEspuma(dt) {
+  // a espuma perde intensidade com o tempo (cerca de 2% por segundo): é preciso reaplicar
+  for (const u of unidades) {
+    if (!(u.esp > 0) || u.acao === 'aplicar') continue;
+    u.eint = (u.eint === undefined ? 1 : u.eint) - dt * 0.02;
+    if (u.eint <= 0) { u.esp = 0; u.eint = 0; }
+  }
+  for (const f of espumasFix) f.int -= dt * 0.02;
+  espumasFix = espumasFix.filter(f => f.int > 0.02);
+}
 function tick(dt) {
+  decairEspuma(dt);
   if (pausado) return;
   pessoas.forEach(q => { q.t += dt / 3; });
   pessoas = pessoas.filter(q => q.t < 1);
@@ -795,7 +806,7 @@ function tick(dt) {
       if (u.tanque <= 0) { u.tanque = 0; u.acao = 'parado'; $('msg').textContent = u.id + ' sem agente. Envie para reabastecer.'; }
     } else if (u.acao === 'aplicar' && u.tanque > 0) {
       const T = TECNICAS[u.tec] || TECNICAS.rolagem, g = geoEspuma(u);
-      u.tanque -= dt * T.cons; u.esp = (u.esp || 0) + dt * T.vel;
+      u.tanque -= dt * T.cons; u.esp = (u.esp || 0) + dt * T.vel; u.eint = Math.min(1, (u.eint === undefined ? 1 : u.eint) + dt * 0.1);
       usou.add(u.id); combate = true;
       if (u.esp >= (u.tec === 'rolagem' ? g.ate : 6)) inc.fumaca -= 1.2 * dt;   // a espuma chegou à aeronave
       if (u.tanque <= 0) { u.tanque = 0; u.acao = 'parado'; $('msg').textContent = u.id + ' sem agente. Envie para reabastecer.'; }
@@ -1248,19 +1259,22 @@ function espumaSobreAero(u, T, t) {
       if (Math.abs(lx) > m.hl + 3) continue;
     }
     const x = a.x + lx * c - ly * sn, y = a.y + lx * sn + ly * c;
-    ctx.globalAlpha = dil ? 0.22 + 0.22 * h3 : 0.4 + 0.35 * h3;
+    ctx.globalAlpha = (dil ? 0.22 + 0.22 * h3 : 0.4 + 0.35 * h3) * INT;
     ctx.fillStyle = i % 4 === 0 ? 'rgba(226,240,250,1)' : 'rgba(255,255,250,1)';
     ctx.beginPath(); ctx.arc(x, y, dil ? 0.7 + h3 * 0.8 : 0.9 + h3 * 1.1, 0, Math.PI * 2); ctx.fill();
   }
   ctx.restore();
 }
 // Manta de espuma no solo: cresce da viatura em direção à aeronave e é empurrada pela espuma nova
+let INT = 1;
 function desenharEspuma(sobre) {
   if (estado !== 'andamento') return;
   const t = performance.now() / 1000;
-  for (const u of unidades) {
-    if (u.acao !== 'aplicar' && !(u.esp > 0)) continue;
+  const lista = unidades.filter(q => q.esp > 0).map(q => ({ x:q.ex === undefined ? q.x : q.ex, y:q.ey === undefined ? q.y : q.ey, tec:q.tec, esp:q.esp, acao:q.acao, int:q.eint === undefined ? 1 : q.eint }))
+    .concat(espumasFix.map(f => ({ ...f, acao:'fix' })));
+  for (const u of lista) {
     const T = TECNICAS[u.tec]; if (!T || !(u.esp > 0)) continue;
+    INT = Math.max(0, Math.min(1, u.int));
     // rolagem e anteparo ficam no solo, por baixo da aeronave; o dilúvio cai por cima enquanto aplica e, ao parar, escorre para o solo ao redor dela
     if ((u.tec === 'diluvio' && u.acao === 'aplicar') !== !!sobre) continue;
     if (u.tec === 'anteparo' || u.tec === 'diluvio') { espumaSobreAero(u, T, t); continue; }
@@ -1268,7 +1282,7 @@ function desenharEspuma(sobre) {
     if (L < 1) continue;
     const w0 = T.larg * 0.55, w1 = T.larg * 0.5;
     ctx.save();
-    ctx.fillStyle = 'rgba(255,252,240,0.38)';
+    ctx.fillStyle = 'rgba(255,252,240,' + (0.38 * INT).toFixed(3) + ')';
     ctx.beginPath();
     ctx.moveTo(g.ox + g.px * w0 * 0.6, g.oy + g.py * w0 * 0.6);
     ctx.lineTo(g.ox + g.ux * L + g.px * w1, g.oy + g.uy * L + g.py * w1);
@@ -1283,7 +1297,7 @@ function desenharEspuma(sobre) {
       const latr = (h2 - 0.5) * 2 * (T.larg * (0.4 + 0.12 * pos / L));
       const x = g.ox + g.ux * pos + g.px * latr, y = g.oy + g.uy * pos + g.py * latr;
       const frente = Math.max(0, 1 - (L - pos) / 14);
-      ctx.globalAlpha = 0.4 + 0.35 * h3;
+      ctx.globalAlpha = (0.4 + 0.35 * h3) * INT;
       ctx.fillStyle = i % 4 === 0 ? 'rgba(226,240,250,1)' : 'rgba(255,255,250,1)';
       ctx.beginPath(); ctx.arc(x, y, 0.9 + h3 * 1.1 + frente * 0.8, 0, Math.PI * 2); ctx.fill();
     }
@@ -1405,6 +1419,7 @@ function atualizarPortas() {
 
 // ---------- Ocorrências: fogo no solo, vazamento de combustível e espuma ----------
 // Tudo isso é programado pelo administrador. O atendente só vê depois que o cenário começa.
+let espumasFix = [];   // espuma já lançada que fica onde caiu: { x, y, tec, esp, int }
 let ocorrencias = [];   // { id, tipo:'fogo'|'comb', x, y, r, int, propaga } | { id, tipo:'comb', x, y, r, espuma }
 let ocSeq = 0;
 let ocKey = '';
@@ -2396,6 +2411,9 @@ function aplicarComando(c, local) {
       break;
     case 'aplicar':
       if (u && estado === 'andamento' && u.tanque > 0 && TECNICAS[c.tec]) {
+        // a espuma já lançada fica onde caiu; a nova começa na posição atual da viatura
+        if (u.esp > 0) { espumasFix.push({ x:u.ex, y:u.ey, tec:u.tec, esp:u.esp, int:u.eint === undefined ? 1 : u.eint }); if (espumasFix.length > 14) espumasFix.shift(); }
+        u.ex = u.x; u.ey = u.y; u.eint = 1;
         const g = geoEspuma(u);
         u.acao = 'aplicar'; u.tec = c.tec; u.esp = 0; u.prog = 0; u.dest = null; u.area = null; u.h = Math.atan2(g.uy, g.ux);
       }
@@ -2509,6 +2527,7 @@ function snapshotEstado() {
     s.portas = portas.map(p => ({ id:p.id, armada:p.armada }));
     s.usou = [...usou];
     s.ocorrencias = ocorrencias.map(o => ({ ...o }));
+    s.espumasFix = espumasFix.map(f => ({ ...f }));
   }
   return s;
 }
@@ -2536,6 +2555,7 @@ function aplicarEstado(s) {
   twrRespostas = s.twrRespostas || [];
   pedidosLR = s.pedidosLR || [];
   ocorrencias = s.ocorrencias || [];
+  espumasFix = s.espumasFix || [];
   usou = new Set(s.usou || []);
   if (s.base) aplicarBase(s.base);
   if (s.abast) aplicarAbast(s.abast);
