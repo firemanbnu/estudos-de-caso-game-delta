@@ -1059,7 +1059,7 @@ function jatoAte(u, alx, aly, baixa) {
   const dx = alx - u.x, dy = aly - u.y, len = Math.hypot(dx, dy) || 1;
   const ux = dx / len, uy = dy / len, px = -uy, py = ux;
   const bx = u.x + ux * 14 * zt(), by = u.y + uy * 14 * zt();
-  const fim = Math.min(len, RANGE * 1.1);
+  const fim = Math.max(2 * zt(), len - 14 * zt());   // o jato termina exatamente no alvo (o bico fica 14 à frente do centro da viatura)
   const tx = bx + ux * fim, ty = by + uy * fim;
   const larg = baixa ? 4.5 : 9, ng = baixa ? 14 : 26;
   const grad = ctx.createLinearGradient(bx, by, tx, ty);
@@ -1096,7 +1096,7 @@ function desenharJatos() {
       let alvo = null, dmin = Infinity;
       for (const q of alvos) { const d = Math.hypot(q.x - u.x, q.y - u.y); if (d < dmin) { dmin = d; alvo = q; } }
       if (alvo && dmin <= RANGE + alvo.raio) jatoAte(u, alvo.x, alvo.y, false);
-    } else if (u.acao === 'proteger' && inc && DIST(u, inc) <= RANGE) {
+    } else if (u.acao === 'proteger' && inc && DIST(u, inc) <= RANGE + 40) {
       // varredura contínua: da frente à cauda e da cauda à frente ao longo da fuselagem
       const tri = 1 - Math.abs(2 * ((t / 6) % 1) - 1);
       const alvo = aeroParaMundo(56 - 112 * tri, 0);
