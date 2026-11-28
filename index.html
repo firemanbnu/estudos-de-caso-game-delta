@@ -53,6 +53,8 @@
   /* Papéis: o atendente não vê as opções de criação do cenário */
   body[data-papel="atendente"] .so-admin { display:none !important; }
   body[data-papel="apresentador"] .so-atendente { display:none !important; }
+  /* o administrador não comanda viaturas: só o atendente */
+  body[data-papel="apresentador"] #barra, body[data-papel="apresentador"] #menuUnid { display:none !important; }
   canvas { touch-action:none; }
   #hud, #barra { transition:opacity .4s; }
   body.ocioso #hud, body.ocioso #barra { opacity:0; pointer-events:none; }
@@ -1108,6 +1110,7 @@ function comandarAcao(u, act) {
 }
 // Clique direito perto da aeronave com unidade selecionada: comando rápido
 function acaoRapida(pt) {
+  if (papel === 'apresentador') return;
   const u = unidadePorId(selId);
   if (!u || !inc || estado !== 'andamento') return;
   const p = toWorld(pt.x, pt.y);
@@ -1507,6 +1510,7 @@ cv.addEventListener('mousedown', e => {
     if (Math.hypot(p.x - hx, p.y - hy) * cam.s <= 16) { rotDrag = { u:sel }; return; }
   }
   const u = unidadeEm(p);
+  if (u && papel === 'apresentador') return;
   if (u) { selecionarUnidade(u.id); drag = { u, x0:p.x, y0:p.y, moved:false }; return; }
   const ar = areaEm(p);
   if (ar) { areaDrag = { a:ar, x0:p.x, y0:p.y, ox:ar.x, oy:ar.y, moved:false, p0:p }; return; }
@@ -1556,6 +1560,7 @@ window.addEventListener('mouseup', e => {
 });
 // Clique em área vazia ou em área: envia a viatura selecionada, ou seleciona a área
 function cliqueMapa(p) {
+  if (papel === 'apresentador') return;
   const a = areaEm(p), s = unidadePorId(selId);
   if (a) {
     if (s && estado !== 'encerrado') executar({ tipo:'area', id:s.id, areaId:a.id });
