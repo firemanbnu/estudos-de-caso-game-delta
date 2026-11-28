@@ -338,11 +338,6 @@
     <div id="roster"></div>
   </section>
 
-  <section id="secSel">
-    <h2>Seleção</h2>
-    <div id="selInfo" class="peq">Nenhuma seleção. Clique em uma viatura ou área no mapa.</div>
-  </section>
-
   <div id="msg">Escolha o tipo de emergência, descreva o caso e clique em "Iniciar cenário". Você pode posicionar unidades e áreas antes.</div>
   <p id="nota">Categorias, tempos, autonomias e taxas são ilustrativos. Validar com o RBAC 153 e os dados reais do aeroporto antes de usar como referência.</p>
 </div>
@@ -1786,7 +1781,7 @@ function atualizarSel() {
     key = 'n';
     html = 'Nenhuma seleção. Clique em uma viatura ou área no mapa.';
   }
-  if (key !== selKey) { selKey = key; $('selInfo').innerHTML = html; }
+  if (key !== selKey) { selKey = key; const el = $('selInfo'); if (el) el.innerHTML = html; }
 }
 
 // Cartões das viaturas no topo: toque seleciona e centraliza a câmera na unidade
@@ -1899,7 +1894,7 @@ $('pathUndo').onclick = () => { trajeto.pop(); };
 $('pathClear').onclick = () => { trajeto = []; };
 
 // ---------- Configurações (somente apresentador) ----------
-const PAINEIS = ['secCaso','secPortas','secUni','secSel'];
+const PAINEIS = ['secCaso','secPortas','secUni'];
 function abrirCfg() {
   if (estado === 'andamento') { $('msg').textContent = 'A base não pode ser alterada durante o caso.'; return; }
   setPainel(true);
