@@ -359,14 +359,14 @@ const TIPOS = {
 };
 const AREAS = {
   ACV: { nome:'Área de concentração de vítimas', sigla:'ACV', cor:'#ef4444', r:36 },
-  TRI: { nome:'Área de triagem',                 sigla:'TRI', cor:'#22c55e', r:53 },
+  TRI: { nome:'Área de triagem',                 sigla:'TRI', cor:'#22c55e', r:16 },
   TRA: { nome:'Área de transporte',              sigla:'TRA', cor:'#374151', r:34 },
   CC:  { nome:'Concentração de viaturas',        sigla:'CC',  cor:'#60a5fa', r:45 },
   RE:  { nome:'Área de reabastecimento',         sigla:'RE',  cor:'#f59e0b', r:45 }
 };
 const AREA_R = 45;
 // Triagem: três retângulos lado a lado (verde, amarelo, vermelho), deslocamentos em relação ao centro da área
-const TRI_RET = [{ dx:-51, cor:'#ef4444', cat:'R', nome:'grave' }, { dx:-17, cor:'#facc15', cat:'A', nome:'moderada' }, { dx:17, cor:'#22c55e', cat:'V', nome:'leve' }, { dx:51, cor:'#9ca3af', cat:'C', nome:'óbito' }];
+const TRI_RET = [{ dx:-18, cor:'#ef4444', cat:'R', nome:'grave' }, { dx:-6, cor:'#facc15', cat:'A', nome:'moderada' }, { dx:6, cor:'#22c55e', cat:'V', nome:'leve' }, { dx:18, cor:'#9ca3af', cat:'C', nome:'óbito' }];
 const ORDEM_REMOCAO = { R:0, A:1, V:2, C:3 };   // vermelhas, amarelas, verdes e por último as cinzas
 const RANGE = 100;      // alcance de atuação em relação à aeronave (unidades do mapa)
 // Técnicas de aplicação de espuma sobre o solo, em direção à aeronave
@@ -575,7 +575,7 @@ function unidadeEm(p) {
 }
 // Formas: triagem e transporte são retângulos; concentração e demais áreas são círculos
 function dentroArea(a, p) {
-  if (a.tipo === 'TRI') return Math.abs(p.x - a.x) <= 68 && Math.abs(p.y - a.y) <= 13;
+  if (a.tipo === 'TRI') return Math.abs(p.x - a.x) <= 24 && Math.abs(p.y - a.y) <= 7;
   if (a.tipo === 'TRA') return Math.abs(p.x - a.x) <= 28 && Math.abs(p.y - a.y) <= 16;
   return DIST(a, p) <= a.r;
 }
@@ -799,7 +799,7 @@ function tick(dt) {
             u.prog = 0;
             const rt = TRI_RET.find(r => r.cat === q.cat);
             q.est = 'triado'; q.na = false;
-            q.tx = tri.x + rt.dx + (Math.random() - 0.5) * 24; q.ty = tri.y + (Math.random() - 0.5) * 16;
+            q.tx = tri.x + rt.dx + (Math.random() - 0.5) * 7; q.ty = tri.y + (Math.random() - 0.5) * 7;
           }
         } else u.prog = 0;
       }
@@ -1559,11 +1559,11 @@ function desenhar() {
     const c = AREAS[a.tipo].cor, sel = a.id === selAreaId;
     if (a.tipo === 'TRI') {
       for (const q of TRI_RET) {
-        const x = a.x + q.dx - 16, y = a.y - 11.2;
+        const x = a.x + q.dx - 5, y = a.y - 5;
         const nq = caminhantes.filter(v => v.est === 'triado' && v.cat === q.cat).length;
-        if (nq) { ctx.fillStyle = '#fff'; ctx.strokeStyle = 'rgba(0,0,0,0.75)'; ctx.lineWidth = 3*k; txt(String(nq), x + 13*zt(), y - 3*zt()); }
-        ctx.globalAlpha = 0.5; ctx.fillStyle = q.cor; ctx.fillRect(x, y, 32, 22.4); ctx.globalAlpha = 1;
-        ctx.strokeStyle = sel ? '#fff' : q.cor; ctx.lineWidth = (sel ? 2.5 : 1.5)*k; ctx.strokeRect(x, y, 32, 22.4);
+        if (nq) { ctx.fillStyle = '#fff'; ctx.strokeStyle = 'rgba(0,0,0,0.75)'; ctx.lineWidth = 3*k; txt(String(nq), x + 3*zt(), y - 2*zt()); }
+        ctx.globalAlpha = 0.5; ctx.fillStyle = q.cor; ctx.fillRect(x, y, 10, 10); ctx.globalAlpha = 1;
+        ctx.strokeStyle = sel ? '#fff' : q.cor; ctx.lineWidth = (sel ? 2.5 : 1.5)*k; ctx.strokeRect(x, y, 10, 10);
       }
     } else if (a.tipo === 'TRA') {
       ctx.globalAlpha = 0.85; ctx.fillStyle = c; ctx.fillRect(a.x - 28, a.y - 16, 56, 32); ctx.globalAlpha = 1;
