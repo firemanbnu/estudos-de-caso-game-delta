@@ -411,8 +411,12 @@ function pontoFuselagem(u) {
 // geometria da aplicação: direção da viatura à aeronave, origem da manta e alcance possível
 function geoEspuma(u) {
   const a = aeroAtual(), dx = a.x - u.x, dy = a.y - u.y, dist = Math.hypot(dx, dy) || 1;
-  const ux = dx / dist, uy = dy / dist, o = 18, alc = Math.max(0, dist - o - 7);
-  return { ux, uy, px:-uy, py:ux, ox:u.x + ux * o, oy:u.y + uy * o, alc, dist };
+  const ux = dx / dist, uy = dy / dist, o = 18, m = medidasAero();
+  const c = Math.cos(a.h || 0), sn = Math.sin(a.h || 0), along = Math.abs(ux * c + uy * sn), lat = Math.abs(-ux * sn + uy * c);
+  const ext = along * m.hl + lat * m.hs;                        // meia extensão da aeronave na direção do jato
+  const ate = Math.max(0, dist - o - 7);                         // até chegar à aeronave
+  const alc = Math.max(ate, dist - o + ext + 14);                // e continua até passar um pouco à frente dela
+  return { ux, uy, px:-uy, py:ux, ox:u.x + ux * o, oy:u.y + uy * o, alc, ate, dist };
 }
 const ACAO_ROTULO = {
   parado:'Parado', combate:'Apagar fogo', proteger:'Proteger aeronave', triagem:'Triar vítimas', aplicar:'Aplicar espuma', espuma:'Espuma sobre combustível', resgate:'Resgatar passageiros',
@@ -793,7 +797,7 @@ function tick(dt) {
       const T = TECNICAS[u.tec] || TECNICAS.rolagem, g = geoEspuma(u);
       u.tanque -= dt * T.cons; u.esp = (u.esp || 0) + dt * T.vel;
       usou.add(u.id); combate = true;
-      if (u.esp >= (u.tec === 'rolagem' ? g.alc : 6)) inc.fumaca -= 1.2 * dt;   // a espuma chegou à aeronave
+      if (u.esp >= (u.tec === 'rolagem' ? g.ate : 6)) inc.fumaca -= 1.2 * dt;   // a espuma chegou à aeronave
       if (u.tanque <= 0) { u.tanque = 0; u.acao = 'parado'; $('msg').textContent = u.id + ' sem agente. Envie para reabastecer.'; }
     } else if (u.acao === 'proteger' && emCena && u.tanque > 0) {
       u.tanque -= dt * (u.vazao === 'baixa' ? 0.5 : 1);
@@ -1251,12 +1255,13 @@ function espumaSobreAero(u, T, t) {
   ctx.restore();
 }
 // Manta de espuma no solo: cresce da viatura em direção à aeronave e é empurrada pela espuma nova
-function desenharEspuma() {
+function desenharEspuma(sobre) {
   if (estado !== 'andamento') return;
   const t = performance.now() / 1000;
   for (const u of unidades) {
     if (u.acao !== 'aplicar' && !(u.esp > 0)) continue;
     const T = TECNICAS[u.tec]; if (!T || !(u.esp > 0)) continue;
+    if ((u.tec === 'diluvio') !== !!sobre) continue;   // rolagem e anteparo ficam no solo, por baixo da aeronave; o dilúvio cai por cima
     if (u.tec === 'anteparo' || u.tec === 'diluvio') { espumaSobreAero(u, T, t); continue; }
     const g = geoEspuma(u), L = Math.min(u.esp, g.alc);
     if (L < 1) continue;
@@ -1631,6 +1636,8 @@ function desenhar() {
   }
   desenharOcorrencias();
 
+  // espuma no solo: por baixo da aeronave
+  desenharEspuma(false);
   // aeronave
   if (inc) {
     ctx.setLineDash([6*k, 5*k]); ctx.strokeStyle = 'rgba(255,255,255,0.3)'; ctx.lineWidth = k;
@@ -1678,7 +1685,7 @@ function desenhar() {
     }
   }
 
-  desenharEspuma();
+  desenharEspuma(true);
   desenharJatos();
   for (const u of unidades) if (u.id !== selId) desenharVeiculo(u);
   { const su = unidadePorId(selId); if (su) desenharVeiculo(su); }
