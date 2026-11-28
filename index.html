@@ -717,13 +717,13 @@ function pontoReuniao(crs, q) {
   return { x: x + (q.ox || 0), y: y + (q.oy || 0) };
 }
 function decairEspuma(dt) {
-  // a espuma perde intensidade com o tempo (cerca de 2% por segundo): é preciso reaplicar
+  // a espuma perde intensidade com o tempo (cerca de 3,5% por segundo): é preciso reaplicar
   for (const u of unidades) {
     if (!(u.esp > 0) || u.acao === 'aplicar') continue;
-    u.eint = (u.eint === undefined ? 1 : u.eint) - dt * 0.02;
+    u.eint = (u.eint === undefined ? 1 : u.eint) - dt * 0.035;
     if (u.eint <= 0) { u.esp = 0; u.eint = 0; }
   }
-  for (const f of espumasFix) f.int -= dt * 0.02;
+  for (const f of espumasFix) f.int -= dt * 0.035;
   espumasFix = espumasFix.filter(f => f.int > 0.02);
 }
 function tick(dt) {
