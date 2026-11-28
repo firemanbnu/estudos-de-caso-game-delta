@@ -46,6 +46,20 @@
   #barraDica { font-size:11px; color:#9ca3af; }
   #placeTxt { color:#fbbf24; }
 
+  /* Administrador: o caso fica na parte inferior da tela; depois de iniciado, só resta o botão de encerrar */
+  #secCaso.caso-baixo { position:fixed; left:60px; right:356px; bottom:8px; z-index:3; display:flex; flex-wrap:wrap; align-items:flex-end; gap:8px 12px; padding:8px 12px; background:var(--vidro,rgba(15,23,42,.94)); border:1px solid var(--borda,#3a4a63); border-radius:14px; box-shadow:0 8px 28px rgba(0,0,0,.4); font-size:13px; }
+  body.sem-painel #secCaso.caso-baixo { right:8px; }
+  #secCaso.caso-baixo h2 { width:100%; margin:0; font-size:12px; text-transform:uppercase; letter-spacing:.08em; color:#fb923c; }
+  #secCaso.caso-baixo .linha { width:auto !important; margin:0; }
+  #secCaso.caso-baixo .linha label { width:auto !important; }
+  #secCaso.caso-baixo .linha[style] { flex:1 1 170px; }
+  #secCaso.caso-baixo .linha[style] input, #secCaso.caso-baixo .linha[style] select { width:100% !important; }
+  #secCaso.caso-baixo textarea { height:44px; resize:vertical; }
+  #secCaso.caso-baixo .peq { display:none; }
+  body.caso-andando #secCaso > :not(#casoBotoes):not(h2) { display:none !important; }
+  body.caso-andando #start { display:none; }
+  body.caso-andando #secCaso.caso-baixo h2 { width:auto; }
+  body.caso-andando #secCaso.caso-baixo { flex-wrap:nowrap; align-items:center; }
   /* Controles de mapa */
   #zoom { position:fixed; left:8px; top:84px; display:flex; flex-direction:column; gap:4px; z-index:2; }
   #zoom button { width:44px; padding:6px 0; text-align:center; font-size:13px; }
@@ -256,7 +270,7 @@
     <div class="linha" style="width:100%"><label style="width:100%">Tipo de aeronave<br><select id="fAeroSel" style="width:100%"></select></label></div>
     <div class="linha"><label>Passageiros a bordo <input id="fPax" type="number" min="0" placeholder="padrão do caso"></label></div>
     <div class="linha" style="width:100%"><label style="width:100%">Combustível a bordo<br><input id="fComb" placeholder="Ex.: 6.500 kg" style="width:100%"></label></div>
-    <div class="linha"><button id="start">Iniciar cenário</button><button id="end" class="sec">Encerrar caso</button></div>
+    <div class="linha" id="casoBotoes"><button id="start">Iniciar cenário</button><button id="end" class="sec">Encerrar caso</button></div>
   </section>
 
   <section id="secOcorr" class="so-admin">
@@ -1934,6 +1948,7 @@ function atualizarUI() {
   $('pause').textContent = pausado ? 'Continuar' : 'Pausar';
   $('pause').className = pausado ? 'ativo' : 'sec';
   const andando = estado === 'andamento';
+  document.body.classList.toggle('caso-andando', andando);
   $('start').disabled = andando;
   $('end').disabled = !andando;
   $('tipo').disabled = andando;
@@ -2049,6 +2064,9 @@ const comandosCol = () => rede.collection('comandos/' + sala + '/itens');
 // Ajusta a interface ao papel: o atendente não vê as opções de criação do cenário
 function aplicarPapelUI() {
   document.body.dataset.papel = papel;
+  { const sc = $('secCaso'), pn = $('painel');
+    if (papel === 'apresentador') { sc.classList.add('caso-baixo'); document.body.appendChild(sc); }
+    else if (sc.classList.contains('caso-baixo')) { sc.classList.remove('caso-baixo'); pn.insertBefore(sc, $('secOcorr')); } }
   if (papel === 'atendente') {
     $('msg').textContent = 'Aguardando o início do cenário pelo apresentador. Posicione viaturas e áreas e comande as ações.';
   }
