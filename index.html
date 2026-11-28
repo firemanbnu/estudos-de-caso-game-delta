@@ -55,7 +55,8 @@
   #secCaso.caso-baixo .linha[style] { flex:1 1 170px; }
   #secCaso.caso-baixo .linha[style] input, #secCaso.caso-baixo .linha[style] select { width:100% !important; }
   #secCaso.caso-baixo textarea { height:44px; resize:vertical; }
-  #secCaso.caso-baixo .peq { display:none; }
+  #secCaso.caso-baixo .peq:not(#pathInfo) { display:none; }
+  #secCaso.caso-baixo #pathInfo { flex:1 1 100%; margin:0; }
   body.caso-andando #secCaso > :not(#casoBotoes):not(h2) { display:none !important; }
   body.caso-andando #start { display:none; }
   body.caso-andando #secCaso.caso-baixo h2 { width:auto; }
@@ -277,6 +278,13 @@
     <div class="linha" style="width:100%"><label style="width:100%">Tipo de aeronave<br><select id="fAeroSel" style="width:100%"></select></label></div>
     <div class="linha"><label>Passageiros a bordo <input id="fPax" type="number" min="0" placeholder="padrão do caso"></label></div>
     <div class="linha" style="width:100%"><label style="width:100%">Combustível a bordo<br><input id="fComb" placeholder="Ex.: 6.500 kg" style="width:100%"></label></div>
+    <div class="linha" style="width:100%"><b style="font-size:12px">Trajetória da aeronave</b></div>
+    <div class="linha" id="pathLinha">
+      <button id="pathBtn" class="sec">Traçar trajetória</button>
+      <button id="pathUndo" class="sec">Desfazer ponto</button>
+      <button id="pathClear" class="sec">Limpar</button>
+    </div>
+    <p class="peq" id="pathInfo">Sem trajetória: a aeronave fica parada em um ponto da pista.</p>
     <div class="linha" id="casoBotoes"><button id="start">Iniciar cenário</button><button id="end" class="sec">Encerrar caso</button></div>
   </section>
 
@@ -310,16 +318,6 @@
     <h2>Portas e escorregadeiras</h2>
     <div id="portasList"></div>
     <p class="peq">Escorregadeira armada aparece no mapa. Passageiros só descem com a aeronave parada. Fogo perto da porta a bloqueia (em vermelho).</p>
-  </section>
-
-  <section id="secPath" class="so-admin">
-    <h2>Trajetória da aeronave</h2>
-    <div class="linha">
-      <button id="pathBtn" class="sec">Traçar trajetória</button>
-      <button id="pathUndo" class="sec">Desfazer ponto</button>
-      <button id="pathClear" class="sec">Limpar</button>
-    </div>
-    <p class="peq" id="pathInfo">Sem trajetória: a aeronave fica parada em um ponto da pista.</p>
   </section>
 
   <section id="secTwr" class="so-atendente">
@@ -1901,7 +1899,7 @@ $('pathUndo').onclick = () => { trajeto.pop(); };
 $('pathClear').onclick = () => { trajeto = []; };
 
 // ---------- Configurações (somente apresentador) ----------
-const PAINEIS = ['secCaso','secPortas','secPath','secUni','secSel'];
+const PAINEIS = ['secCaso','secPortas','secUni','secSel'];
 function abrirCfg() {
   if (estado === 'andamento') { $('msg').textContent = 'A base não pode ser alterada durante o caso.'; return; }
   setPainel(true);
